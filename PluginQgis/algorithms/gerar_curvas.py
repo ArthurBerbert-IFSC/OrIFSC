@@ -11,6 +11,17 @@ from qgis.core import (
 import processing
 
 
+def _ocultar_da_toolbox(alg):
+    """Marca o algoritmo como oculto da Caixa de Ferramentas (só acessível pelo menu).
+    Compatível com QGIS antigo (FlagHideFromToolbox) e novo (Qgis.ProcessingAlgorithmFlag)."""
+    flags = super(type(alg), alg).flags()
+    try:
+        return flags | QgsProcessingAlgorithm.FlagHideFromToolbox
+    except AttributeError:
+        from qgis.core import Qgis
+        return flags | Qgis.ProcessingAlgorithmFlag.HideFromToolbox
+
+
 class GerarCurvasNivel(QgsProcessingAlgorithm):
     LIMITE = 'LIMITE'
     EQUIDISTANCIA = 'EQUIDISTANCIA'
@@ -18,16 +29,17 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
 
     def tr(self, s): return s
     def createInstance(self): return GerarCurvasNivel()
+    def flags(self): return _ocultar_da_toolbox(self)
     def name(self): return 'gerar_curvas_nivel'
-    def displayName(self): return '2. Gerar Curvas de Nível Automáticas'
+    def displayName(self): return '4. Gerar Curvas de Nível Automáticas'
     def group(self): return 'Orientação'
     def groupId(self): return 'orientacao'
     def shortHelpString(self): return ('Baixa o MDT Copernicus 30m (gratuito, sem API key) '
-                                       'e gera curvas de nível suavizadas.')
+                                       'e gera curvas de nível suavizadas para a área da folha.')
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFeatureSource(
-            self.LIMITE, 'Camada Limite desenhada', [QgsProcessing.TypeVectorPolygon]))
+            self.LIMITE, 'Camada da Folha (área a mapear)', [QgsProcessing.TypeVectorPolygon]))
         self.addParameter(QgsProcessingParameterNumber(
             self.EQUIDISTANCIA, 'Equidistância (metros)',
             type=QgsProcessingParameterNumber.Integer, defaultValue=5))
