@@ -15,5 +15,5 @@ tags=orienteering,orientacao,mapa,contour,curvas de nivel,orientismo,ocad
 homepage=https://github.com/arthurberbert-ifsc/oripy
 category=Vector
 icon=icons/icon.svg
-experimental=True
+experimental=False
 deprecated=False
