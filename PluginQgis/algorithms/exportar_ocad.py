@@ -1,3 +1,4 @@
+import datetime
 import math
 import os
 import urllib.request
@@ -6,9 +7,10 @@ from concurrent.futures import ThreadPoolExecutor
 from qgis.core import (
     QgsProcessingAlgorithm, QgsProcessingParameterFeatureSource,
     QgsProcessingParameterVectorLayer, QgsProcessingParameterEnum,
-    QgsProcessingParameterBoolean, QgsProcessingParameterFolderDestination,
+    QgsProcessingParameterBoolean, QgsProcessingParameterNumber,
+    QgsProcessingParameterFolderDestination,
     QgsProcessingException, QgsProcessing, QgsProject, QgsProcessingContext,
-    QgsVectorFileWriter, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+    QgsCoordinateReferenceSystem, QgsCoordinateTransform,
 )
 from qgis.PyQt.QtGui import QImage, QPainter
 
@@ -40,91 +42,171 @@ def _ocultar_da_toolbox(alg):
 class ExportarOCAD(QgsProcessingAlgorithm):
     FOLHA = 'FOLHA'
     EXPORTAR_SATELITE = 'EXPORTAR_SATELITE'
-    SAT_FORMATO = 'SAT_FORMATO'
     QUALIDADE = 'QUALIDADE'
     CURVAS = 'CURVAS'
-    LIMITE = 'LIMITE'
-    FORMATO = 'FORMATO'
+    DECL_AUTO = 'DECL_AUTO'
+    DECL_MANUAL = 'DECL_MANUAL'
     PASTA = 'PASTA'
 
     def tr(self, s): return s
     def createInstance(self): return ExportarOCAD()
     def flags(self): return _ocultar_da_toolbox(self)
     def name(self): return 'exportar_ocad'
-    def displayName(self): return '5. Exportar para o OCAD'
-    def group(self): return 'Orientação'
+    def displayName(self): return 'Gerar Projeto OCAD / OOM'
+    def group(self): return 'OrIFSC'
     def groupId(self): return 'orientacao'
     def shortHelpString(self):
         from ..acoes.painel import painel_html, INSTRUCOES
-        return painel_html('Exportar para o OCAD', INSTRUCOES['exportar_ocad'])
+        return painel_html('Gerar Projeto OCAD / OOM', INSTRUCOES['exportar_ocad'])
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFeatureSource(
-            self.FOLHA, 'Camada da Folha (define a área de recorte)',
+            self.FOLHA, 'Camada da Folha (define a área e a georreferência)',
             [QgsProcessing.TypeVectorPolygon]))
         self.addParameter(QgsProcessingParameterBoolean(
-            self.EXPORTAR_SATELITE, 'Exportar imagem de satélite',
+            self.EXPORTAR_SATELITE, 'Incluir satélite como mapa de fundo',
             defaultValue=True))
         self.addParameter(QgsProcessingParameterEnum(
-            self.SAT_FORMATO, 'Formato da imagem',
-            options=['GeoTIFF (sem perdas)', 'PNG (sem perdas)',
-                     'JPEG (qualidade alta)'], defaultValue=0))
-        self.addParameter(QgsProcessingParameterEnum(
-            self.QUALIDADE, 'Qualidade (zoom do Google)',
+            self.QUALIDADE, 'Qualidade da imagem (zoom do Google)',
             options=['Máxima (melhor zoom)', 'Alta (1 nível abaixo)',
                      'Média (2 níveis abaixo)'], defaultValue=0))
         self.addParameter(QgsProcessingParameterVectorLayer(
-            self.CURVAS, 'Camada de Curvas de Nível (opcional)',
+            self.CURVAS, 'Camada de Curvas de Nível (vira objeto no projeto)',
             [QgsProcessing.TypeVectorLine], optional=True))
-        self.addParameter(QgsProcessingParameterVectorLayer(
-            self.LIMITE, 'Camada de Limite (opcional)',
-            [QgsProcessing.TypeVectorPolygon], optional=True))
-        self.addParameter(QgsProcessingParameterEnum(
-            self.FORMATO, 'Formato dos vetores (curvas/limite)',
-            options=['Shapefile (.shp)', 'GeoJSON (.geojson)'], defaultValue=0))
+        self.addParameter(QgsProcessingParameterBoolean(
+            self.DECL_AUTO, 'Calcular declinação magnética automaticamente (WMM/NOAA)',
+            defaultValue=True))
+        self.addParameter(QgsProcessingParameterNumber(
+            self.DECL_MANUAL, 'Declinação magnética manual (graus, leste +)',
+            type=QgsProcessingParameterNumber.Double, defaultValue=0.0,
+            minValue=-90.0, maxValue=90.0))
         self.addParameter(QgsProcessingParameterFolderDestination(
             self.PASTA, 'Pasta de saída'))
 
     def processAlgorithm(self, parameters, context, feedback):
+        from .ocad import ProjetoOcad, escrever_omap, escrever_ocd_v9
+        from .ocad.geo import declinacao_noaa
+        from .ocad.projeto import centro_latlon
+
         folha = self.parameterAsSource(parameters, self.FOLHA, context)
         exportar_sat = self.parameterAsBool(parameters, self.EXPORTAR_SATELITE, context)
-        idx_sat_fmt = self.parameterAsInt(parameters, self.SAT_FORMATO, context)
         offset_zoom = self.parameterAsInt(parameters, self.QUALIDADE, context)
         curvas = self.parameterAsVectorLayer(parameters, self.CURVAS, context)
-        limite = self.parameterAsVectorLayer(parameters, self.LIMITE, context)
-        idx_formato = self.parameterAsInt(parameters, self.FORMATO, context)
+        decl_auto = self.parameterAsBool(parameters, self.DECL_AUTO, context)
+        decl_manual = self.parameterAsDouble(parameters, self.DECL_MANUAL, context)
         pasta = self.parameterAsString(parameters, self.PASTA, context)
 
         if not pasta:
             raise QgsProcessingException('Selecione uma pasta de saída.')
         os.makedirs(pasta, exist_ok=True)
 
-        extent = folha.sourceExtent()
         crs = folha.sourceCrs()
-        saidas = {}
+        epsg = self._epsg_utm(crs)
+        extent = folha.sourceExtent()
+        rect = (extent.xMinimum(), extent.yMinimum(),
+                extent.xMaximum(), extent.yMaximum())
 
+        escala = self._ler_escala()
+
+        # 1. Satélite (GeoTIFF georreferenciado, usado como mapa de fundo).
+        satelite = None
         if exportar_sat:
-            img_path = self._exportar_satelite(extent, crs, idx_sat_fmt, offset_zoom,
-                                               pasta, feedback)
-            saidas['SATELITE'] = img_path
-            self._carregar_no_projeto(img_path, 'Satélite (exportado)', context)
+            feedback.pushInfo('Montando imagem de satélite...')
+            tif = self._exportar_satelite(extent, crs, offset_zoom, pasta, feedback)
+            satelite = self._geotransform(tif)
+            self._carregar_no_projeto(tif, 'Satélite (exportado)', context)
+        feedback.setProgress(60)
+
+        # 2. Curvas de nível -> polilinhas no CRS da folha.
+        linhas = []
+        if curvas is not None:
+            feedback.pushInfo('Lendo curvas de nível...')
+            linhas = self._curvas_para_linhas(curvas, crs)
+            feedback.pushInfo(f'{len(linhas)} curva(s) lida(s).')
         feedback.setProgress(70)
 
-        if curvas is not None:
-            feedback.pushInfo('Exportando curvas de nível...')
-            saidas['CURVAS'] = self._exportar_vetor(curvas, idx_formato, pasta, 'curvas')
-        feedback.setProgress(85)
+        # 3. Declinação magnética.
+        declinacao = decl_manual
+        if decl_auto:
+            lat, lon = centro_latlon(epsg, (rect[0] + rect[2]) / 2,
+                                     (rect[1] + rect[3]) / 2)
+            hoje = datetime.date.today()
+            feedback.pushInfo('Consultando declinação magnética (NOAA/WMM)...')
+            valor = declinacao_noaa(lat, lon, hoje.year, hoje.month, hoje.day)
+            if valor is None:
+                feedback.pushWarning(
+                    'Não foi possível obter a declinação automática; usando o '
+                    f'valor manual ({decl_manual:.2f}°).')
+            else:
+                declinacao = valor
+        feedback.pushInfo(f'Declinação usada: {declinacao:.2f}°.')
+        feedback.setProgress(80)
 
-        if limite is not None:
-            feedback.pushInfo('Exportando camada de limite...')
-            saidas['LIMITE'] = self._exportar_vetor(limite, idx_formato, pasta, 'limite')
+        # 4. Monta o projeto e escreve os dois formatos.
+        proj = ProjetoOcad(escala, epsg, rect, declinacao, linhas, satelite)
+        feedback.pushInfo(f'Convergência meridiana: {proj.convergencia:.2f}° | '
+                          f'grivação (norte magnético): {proj.grivacao:.2f}°.')
+
+        omap = os.path.join(pasta, 'projeto_oriifsc.omap')
+        ocd = os.path.join(pasta, 'projeto_oriifsc.ocd')
+        feedback.pushInfo('Gerando projeto OpenOrienteering Mapper (.omap)...')
+        escrever_omap(proj, omap)
+        feedback.pushInfo('Gerando projeto OCAD 9 (.ocd)...')
+        escrever_ocd_v9(proj, ocd)
         feedback.setProgress(100)
 
-        feedback.pushInfo(f'Exportação concluída. Arquivos em: {pasta}')
-        return saidas
+        feedback.pushInfo(f'Projetos gerados em: {pasta}')
+        return {'OMAP': omap, 'OCD': ocd}
+
+    # ------------------------------------------------------------------ apoio
+    def _epsg_utm(self, crs):
+        authid = crs.authid()                       # ex.: 'EPSG:32722'
+        if not authid.startswith('EPSG:'):
+            raise QgsProcessingException(
+                'A folha precisa estar em um CRS UTM/WGS84 (rode "Definir Local").')
+        epsg = int(authid.split(':')[1])
+        if not (32601 <= epsg <= 32660 or 32701 <= epsg <= 32760):
+            raise QgsProcessingException(
+                f'CRS {authid} não é WGS84/UTM. Rode "Definir Local e Criar Folha".')
+        return epsg
+
+    def _ler_escala(self):
+        from ..acoes.comum import ler_escala
+        escala = ler_escala()
+        if not escala:
+            raise QgsProcessingException(
+                'Escala não definida. Rode antes "Definir Local e Criar Folha".')
+        return escala
+
+    def _curvas_para_linhas(self, layer, crs_destino):
+        """Lê as feições de linha reprojetadas para o CRS da folha como listas
+        de (x, y). Itera vértices por parte (robusto a multipartes e curvas)."""
+        ct = QgsCoordinateTransform(layer.crs(), crs_destino, QgsProject.instance())
+        linhas = []
+        for feat in layer.getFeatures():
+            geom = feat.geometry()
+            if geom is None or geom.isEmpty():
+                continue
+            geom.transform(ct)
+            for parte in geom.parts():
+                pts = [(v.x(), v.y()) for v in parte.vertices()]
+                if len(pts) >= 2:
+                    linhas.append(pts)
+        return linhas
+
+    def _geotransform(self, tif):
+        """Lê origem/pixel/tamanho do GeoTIFF para posicionar o fundo no OCD."""
+        from osgeo import gdal
+        ds = gdal.Open(tif)
+        gt = ds.GetGeoTransform()
+        sat = {'path': tif, 'ulx': gt[0], 'uly': gt[3],
+               'px': gt[1], 'py': gt[5],
+               'w': ds.RasterXSize, 'h': ds.RasterYSize}
+        ds = None
+        return sat
 
     # ------------------------------------------------------------------ satélite
-    def _exportar_satelite(self, extent, crs, idx_sat_fmt, offset_zoom, pasta, feedback):
+    def _exportar_satelite(self, extent, crs, offset_zoom, pasta, feedback):
         # 1. Área da folha (UTM) -> bbox em EPSG:3857 (CRS das tiles).
         crs3857 = QgsCoordinateReferenceSystem.fromEpsgId(3857)
         rect = QgsCoordinateTransform(
@@ -137,21 +219,8 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         img, bounds3857 = self._baixar_mosaico(rect, zoom, feedback)
 
         # 4. Georreferencia em 3857 e reprojeta para o CRS da folha (alinha às curvas).
-        tif_utm = os.path.join(pasta, '_satelite_utm.tif')
-        self._georref_e_reprojeta(img, bounds3857, crs, tif_utm)
-
-        # 5. Salva no formato escolhido.
-        if idx_sat_fmt == 0:
-            caminho = os.path.join(pasta, 'satelite_oriifsc.tif')
-            os.replace(tif_utm, caminho)
-        else:
-            ext, nome_wld = ('png', 'pgw') if idx_sat_fmt == 1 else ('jpg', 'jgw')
-            caminho = os.path.join(pasta, f'satelite_oriifsc.{ext}')
-            self._tif_para_imagem(tif_utm, caminho, ext, pasta, nome_wld)
-            try:
-                os.remove(tif_utm)
-            except OSError:
-                pass
+        caminho = os.path.join(pasta, 'satelite_oriifsc.tif')
+        self._georref_e_reprojeta(img, bounds3857, crs, caminho)
         return caminho
 
     def _escolher_zoom(self, rect, offset_zoom, feedback):
@@ -201,7 +270,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                 if not ok:
                     falhas += 1
                 if i % 25 == 0:
-                    feedback.setProgress(int(60 * i / len(tiles)))
+                    feedback.setProgress(int(50 * i / len(tiles)))
         pintor.end()
         if falhas == len(tiles):
             raise QgsProcessingException(
@@ -244,8 +313,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             gdal.Translate(tmp_3857, tmp_png, outputSRS='EPSG:3857',
                            outputBounds=[ulx, uly, lrx, lry])
             # dstAlpha: os cantos vazios da reprojeção (faixa preta) viram
-            # transparentes (vale em GeoTIFF/PNG; JPEG não tem alfa).
-            # Lanczos reamostra com mais nitidez que cúbica.
+            # transparentes. Lanczos reamostra com mais nitidez que cúbica.
             gdal.Warp(destino_tif, tmp_3857, dstSRS=crs.authid(),
                       resampleAlg='lanczos', multithread=True, dstAlpha=True,
                       creationOptions=['COMPRESS=DEFLATE', 'TILED=YES'])
@@ -256,46 +324,8 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                 except OSError:
                     pass
 
-    def _tif_para_imagem(self, tif_utm, caminho, ext, pasta, nome_wld):
-        """Converte o GeoTIFF UTM para PNG/JPEG + world file (.pgw/.jgw)."""
-        from osgeo import gdal
-        drv = 'PNG' if ext == 'png' else 'JPEG'
-        # PNG mantém o alfa (transparência); JPEG não suporta, usa só RGB.
-        if ext == 'jpg':
-            opts = {'creationOptions': ['QUALITY=95'], 'bandList': [1, 2, 3]}
-        else:
-            opts = {}
-        gdal.Translate(caminho, tif_utm, format=drv, **opts)
-
-        ds = gdal.Open(tif_utm)
-        gt = ds.GetGeoTransform()
-        ds = None
-        nome = os.path.splitext(os.path.basename(caminho))[0] + '.' + nome_wld
-        with open(os.path.join(pasta, nome), 'w') as f:
-            f.write(f'{gt[1]}\n0.0\n0.0\n{gt[5]}\n'
-                    f'{gt[0] + gt[1] / 2}\n{gt[3] + gt[5] / 2}\n')
-
     def _carregar_no_projeto(self, caminho, nome, context):
         """Recarrega o arquivo exportado no projeto ao final (na thread principal)."""
         proj = context.project() or QgsProject.instance()
         detalhes = QgsProcessingContext.LayerDetails(nome, proj, nome)
         context.addLayerToLoadOnCompletion(caminho, detalhes)
-
-    # ------------------------------------------------------------------- vetores
-    def _exportar_vetor(self, layer, idx_formato, pasta, nome_base):
-        usar_shp = (idx_formato == 0)
-        ext = 'shp' if usar_shp else 'geojson'
-        driver = 'ESRI Shapefile' if usar_shp else 'GeoJSON'
-        caminho = os.path.join(pasta, f'{nome_base}_oriifsc.{ext}')
-
-        options = QgsVectorFileWriter.SaveVectorOptions()
-        options.driverName = driver
-        options.fileEncoding = 'UTF-8'
-
-        QgsVectorFileWriter.writeAsVectorFormatV3(
-            layer,
-            caminho,
-            QgsProject.instance().transformContext(),
-            options,
-        )
-        return caminho

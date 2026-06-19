@@ -70,7 +70,7 @@ class OrIFSCPlugin:
                 ]},
             ]},
             {'titulo': 'Exportar', 'itens': [
-                {'titulo': 'Exportar para o OCAD', 'slot': self._exportar_ocad},
+                {'titulo': 'Gerar Projeto OCAD / OOM…', 'slot': self._exportar_ocad},
             ]},
             SEP,
             {'titulo': 'Configurações…', 'slot': self._configuracoes},

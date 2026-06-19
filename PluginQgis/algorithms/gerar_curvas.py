@@ -42,7 +42,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
     def flags(self): return _ocultar_da_toolbox(self)
     def name(self): return 'gerar_curvas_nivel'
     def displayName(self): return 'Gerar Curvas de Nível Automáticas'
-    def group(self): return 'Orientação'
+    def group(self): return 'OrIFSC'
     def groupId(self): return 'orientacao'
     def shortHelpString(self):
         from ..acoes.painel import painel_html, INSTRUCOES

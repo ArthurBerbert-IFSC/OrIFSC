@@ -1,11 +1,13 @@
 [general]
 name=OrIFSC
 qgisMinimumVersion=3.16
-description=Gerador de bases cartográficas para mapas de orientação esportiva
+description=Generate cartographic base maps for the sport of orienteering
+description[pt]=Gerador de bases cartográficas para mapas de orientação esportiva
 version=0.3.0
 author=IFSC / Federação Catarinense de Orientação / Clube de Orientação de Florianópolis
 email=arthur@berbert.eng.br
-about=Plugin para geração automatizada de bases cartográficas para mapas de orientação esportiva, em parceria entre o IFSC, a Federação Catarinense de Orientação e o Clube de Orientação de Florianópolis. Gera imagem georreferenciada do satélite e curvas de nível prontas para importar no OCAD.
+about=OrIFSC automates the production of cartographic base maps for the sport of orienteering. It is a partnership between IFSC (Instituto Federal de Santa Catarina), the Santa Catarina Orienteering Federation (FCO) and the Florianópolis Orienteering Club (FLORA). The plugin loads a georeferenced satellite image, generates smoothed contour lines from free elevation data (Copernicus 30 m DEM) and exports a ready-to-open project for OCAD and OpenOrienteering Mapper, already set up with georeferencing, magnetic declination, the satellite backdrop and the contour lines as map objects.
+about[pt]=Plugin para geração automatizada de bases cartográficas para mapas de orientação esportiva, em parceria entre o IFSC, a Federação Catarinense de Orientação e o Clube de Orientação de Florianópolis. Carrega imagem georreferenciada de satélite, gera curvas de nível suavizadas (MDT Copernicus 30 m) e exporta um projeto pronto para abrir no OCAD e no OpenOrienteering Mapper, já com georreferência, declinação magnética, o satélite como fundo e as curvas como objetos.
 tracker=https://github.com/arthurberbert-ifsc/oripy/issues
 repository=https://github.com/arthurberbert-ifsc/oripy
 hasProcessingProvider=yes

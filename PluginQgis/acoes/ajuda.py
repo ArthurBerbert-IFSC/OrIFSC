@@ -6,6 +6,7 @@ informação.
 import os
 import configparser
 
+from qgis.core import QgsSettings
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.PyQt.QtCore import QUrl
 from qgis.PyQt.QtGui import QDesktopServices
@@ -19,10 +20,28 @@ def _geral():
     return cfg['general'] if cfg.has_section('general') else {}
 
 
+def _idioma():
+    """Código de idioma do QGIS (ex.: 'pt'), ou '' se indefinido."""
+    loc = QgsSettings().value('locale/userLocale', '') or ''
+    return loc.split('_')[0].lower()
+
+
+def _localizado(g, chave):
+    """Valor de `chave` no idioma do QGIS (chave[xx]) com fallback para o
+    padrão (inglês). O metadata.txt traz description/about em inglês e a
+    variante [pt] em português."""
+    lang = _idioma()
+    if lang:
+        traduzido = g.get(f'{chave}[{lang}]')
+        if traduzido:
+            return traduzido
+    return g.get(chave, '')
+
+
 def sobre(parent=None):
     g = _geral()
     versao = g.get('version', '?')
-    about = g.get('about', '')
+    about = _localizado(g, 'about')
     repo = g.get('repository', '')
     tracker = g.get('tracker', '')
     autor = g.get('author', '')

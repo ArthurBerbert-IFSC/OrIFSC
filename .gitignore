@@ -1,0 +1,11 @@
+# Python compilados
+__pycache__/
+*.py[cod]
+*.so
+
+# SO
+.DS_Store
+Thumbs.db
+
+# Dado pesado de articulação SC (não faz parte do plugin; não referenciado pelo código)
+PluginQgis/sigsc_articulacao_50k_10k.geojson

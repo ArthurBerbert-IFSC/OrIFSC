@@ -10,9 +10,9 @@ duas formas:
     (`painel_html`), que o QGIS renderiza no painel de ajuda à direita do
     diálogo: Gerar Curvas, Exportar para o OCAD.
 
-Os logos ficam em `PluginQgis/recursos/` (oriesc.png, ifsc.png, flora.png). Se
-um arquivo não existir, a tag <img> simplesmente não aparece — título e
-instruções continuam visíveis (degradação suave).
+Os logos ficam em `recursos/` (ORIESC.jpg, ifsc.png, FLORA.png). Se um arquivo
+não existir, a tag <img> simplesmente não aparece — título e instruções
+continuam visíveis (degradação suave).
 """
 import os
 
@@ -22,9 +22,9 @@ RECURSOS = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'recursos')
 
 # (arquivo, legenda) na ordem de exibição.
 LOGOS = [
-    ('oriesc.png', 'Federação Catarinense de Orientação'),
+    ('ORIESC.jpg', 'Federação Catarinense de Orientação'),
     ('ifsc.png', 'Instituto Federal de Santa Catarina'),
-    ('flora.png', 'Clube de Orientação de Florianópolis'),
+    ('FLORA.png', 'Clube de Orientação de Florianópolis'),
 ]
 
 
@@ -100,15 +100,22 @@ INSTRUCOES = {
         '(a folha ou o limite). Deixe o recorte em branco para não recortar.</p>'
     ),
     'exportar_ocad': (
-        '<p>Gera os arquivos prontos para importar no <b>OCAD</b> a partir da '
-        'área da folha:</p>'
+        '<p>Gera um <b>projeto pronto para abrir</b>, já configurado, em dois '
+        'formatos a partir da folha:</p>'
         '<ul>'
-        '<li><b>satelite_oriifsc</b> (tif/png/jpg) — imagem do satélite montada '
-        'das tiles do Google no melhor zoom e reprojetada para o CRS da folha;</li>'
-        '<li><b>curvas_oriifsc</b> (shp/geojson) — curvas de nível (opcional);</li>'
-        '<li><b>limite_oriifsc</b> (shp/geojson) — contorno da área (opcional).</li>'
+        '<li><b>projeto_oriifsc.ocd</b> — abre direto no <b>OCAD 9+</b>;</li>'
+        '<li><b>projeto_oriifsc.omap</b> — abre no <b>OpenOrienteering Mapper</b> '
+        '(e, de lá, exporta para OCAD se preciso).</li>'
         '</ul>'
-        '<p>Posicione a folha e salve as edições antes de exportar. A imagem '
-        'exportada é recarregada no projeto para conferência.</p>'
+        '<p>Os dois já trazem:</p>'
+        '<ul>'
+        '<li><b>georreferência</b> (UTM, escala e grade) e <b>declinação '
+        'magnética</b> (automática pela coordenada, via WMM/NOAA, ou manual);</li>'
+        '<li>o <b>satélite</b> como mapa de fundo georreferenciado;</li>'
+        '<li>as <b>curvas de nível</b> já como objetos de linha (símbolo de curva '
+        'embutido). O resto dos símbolos você carrega no OCAD/OOM.</li>'
+        '</ul>'
+        '<p>Posicione a folha e salve as edições antes de gerar. O satélite '
+        '<b>.tif</b> fica na mesma pasta — mantenha-o junto dos projetos.</p>'
     ),
 }
