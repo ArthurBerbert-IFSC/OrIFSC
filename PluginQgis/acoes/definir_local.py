@@ -1,4 +1,4 @@
-"""Passo 2 — Definir Local e Criar Folha.
+"""Definir Local e Criar Folha.
 
 Diálogo que pede a coordenada (Google Maps), escala e folha; configura o
 projeto em UTM, guarda o retângulo da folha para os passos seguintes e já cria
@@ -16,6 +16,7 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .comum import salvar_folha, salvar_escala
+from .painel import montar_com_painel, INSTRUCOES
 
 ESCALAS = [
     ('1:4.000',  4000),
@@ -33,10 +34,10 @@ class DialogDefinirLocal(QDialog):
     def __init__(self, iface, parent=None):
         super().__init__(parent)
         self.iface = iface
-        self.setWindowTitle('OrIFSC — 2. Definir Local e Criar Folha')
+        self.setWindowTitle('OrIFSC — Definir Local e Criar Folha')
         self.setMinimumWidth(400)
 
-        layout = QVBoxLayout(self)
+        layout = QVBoxLayout()
         form = QFormLayout()
         layout.addLayout(form)
 
@@ -80,8 +81,34 @@ class DialogDefinirLocal(QDialog):
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
 
+        montar_com_painel(self, layout, 'Definir Local e Criar Folha',
+                          INSTRUCOES['definir_local'])
+
+        self._aplicar_padroes()
         self._atualizar_preview()
         self._prefill_coord_do_canvas()
+
+    def _aplicar_padroes(self):
+        """Pré-seleciona escala/folha/orientação a partir das Configurações."""
+        try:
+            from .configuracoes import (ler_escala_padrao, ler_folha_padrao,
+                                        ler_orientacao_padrao)
+        except Exception:
+            return
+        padrao = ler_escala_padrao()
+        for i, (_, val) in enumerate(ESCALAS):
+            if val == padrao:
+                self.escala_combo.setCurrentIndex(i)
+                break
+        else:
+            self.escala_combo.setCurrentIndex(len(ESCALAS) - 1)  # Personalizada...
+            self.escala_custom.setValue(padrao)
+        nomes = [nome for nome, _, _ in FOLHAS]
+        folha = ler_folha_padrao()
+        if folha in nomes:
+            self.folha_combo.setCurrentIndex(nomes.index(folha))
+        self.orientacao_combo.setCurrentIndex(
+            1 if ler_orientacao_padrao() == 'Retrato' else 0)
 
     def _prefill_coord_do_canvas(self):
         """Pré-preenche o campo com o centro da vista atual (em Lat,Lon)."""

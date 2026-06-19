@@ -31,5 +31,5 @@ class OrIFSCProvider(QgsProcessingProvider):
         return 'OrIFSC — Orientação IFSC'
 
     def icon(self):
-        icon_path = os.path.join(os.path.dirname(__file__), 'icons', 'icon.png')
+        icon_path = os.path.join(os.path.dirname(__file__), 'icons', 'icon.svg')
         return QIcon(icon_path) if os.path.exists(icon_path) else super().icon()

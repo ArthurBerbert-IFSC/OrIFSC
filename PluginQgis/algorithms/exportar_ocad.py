@@ -1,19 +1,29 @@
+import math
 import os
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 from qgis.core import (
     QgsProcessingAlgorithm, QgsProcessingParameterFeatureSource,
     QgsProcessingParameterVectorLayer, QgsProcessingParameterEnum,
     QgsProcessingParameterBoolean, QgsProcessingParameterFolderDestination,
     QgsProcessingException, QgsProcessing, QgsProject, QgsProcessingContext,
-    QgsMapSettings, QgsMapRendererParallelJob, QgsVectorFileWriter,
+    QgsVectorFileWriter, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
 )
-from qgis.PyQt.QtCore import QSize, QEventLoop
-from qgis.PyQt.QtGui import QImage
+from qgis.PyQt.QtGui import QImage, QPainter
 
-from ..acoes.comum import ler_escala
+# --- Web Mercator / tiles do Google -----------------------------------------
+TILE = 256
+ORIGIN_SHIFT = math.pi * 6378137.0          # meia-circunferência em EPSG:3857
+ZOOM_MAX = 20                               # zoom máximo do Google Satellite (lyrs=s)
+MAX_PX = 16384                              # teto por lado do mosaico
+TILE_URL = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
+UA = 'Mozilla/5.0 (QGIS OrIFSC plugin)'
 
-# Teto de segurança por lado (evita estourar memória em folhas grandes).
-MAX_PX = 25000
+
+def _resolucao(zoom):
+    """Metros por pixel (em EPSG:3857) no nível de zoom dado."""
+    return (2.0 * ORIGIN_SHIFT) / (TILE * (2 ** zoom))
 
 
 def _ocultar_da_toolbox(alg):
@@ -31,7 +41,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
     FOLHA = 'FOLHA'
     EXPORTAR_SATELITE = 'EXPORTAR_SATELITE'
     SAT_FORMATO = 'SAT_FORMATO'
-    DPI = 'DPI'
+    QUALIDADE = 'QUALIDADE'
     CURVAS = 'CURVAS'
     LIMITE = 'LIMITE'
     FORMATO = 'FORMATO'
@@ -45,14 +55,8 @@ class ExportarOCAD(QgsProcessingAlgorithm):
     def group(self): return 'Orientação'
     def groupId(self): return 'orientacao'
     def shortHelpString(self):
-        return ('Gera os arquivos prontos para importar no OCAD a partir da área da '
-                'folha:\n'
-                '• satelite_oriifsc.(tif|png|jpg) — imagem georreferenciada do satélite,\n'
-                '  na resolução real da folha (mm × DPI);\n'
-                '• curvas_oriifsc.(shp|geojson) — curvas de nível (opcional);\n'
-                '• limite_oriifsc.(shp|geojson) — contorno da área (opcional).\n\n'
-                'Posicione a folha e salve as edições antes de exportar. A imagem '
-                'exportada é recarregada no projeto para conferência.')
+        from ..acoes.painel import painel_html, INSTRUCOES
+        return painel_html('Exportar para o OCAD', INSTRUCOES['exportar_ocad'])
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFeatureSource(
@@ -66,9 +70,9 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             options=['GeoTIFF (sem perdas)', 'PNG (sem perdas)',
                      'JPEG (qualidade alta)'], defaultValue=0))
         self.addParameter(QgsProcessingParameterEnum(
-            self.DPI, 'Resolução da imagem',
-            options=['150 DPI (rascunho)', '300 DPI (impressão)',
-                     '600 DPI (máxima)'], defaultValue=1))
+            self.QUALIDADE, 'Qualidade (zoom do Google)',
+            options=['Máxima (melhor zoom)', 'Alta (1 nível abaixo)',
+                     'Média (2 níveis abaixo)'], defaultValue=0))
         self.addParameter(QgsProcessingParameterVectorLayer(
             self.CURVAS, 'Camada de Curvas de Nível (opcional)',
             [QgsProcessing.TypeVectorLine], optional=True))
@@ -85,7 +89,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         folha = self.parameterAsSource(parameters, self.FOLHA, context)
         exportar_sat = self.parameterAsBool(parameters, self.EXPORTAR_SATELITE, context)
         idx_sat_fmt = self.parameterAsInt(parameters, self.SAT_FORMATO, context)
-        idx_dpi = self.parameterAsInt(parameters, self.DPI, context)
+        offset_zoom = self.parameterAsInt(parameters, self.QUALIDADE, context)
         curvas = self.parameterAsVectorLayer(parameters, self.CURVAS, context)
         limite = self.parameterAsVectorLayer(parameters, self.LIMITE, context)
         idx_formato = self.parameterAsInt(parameters, self.FORMATO, context)
@@ -100,17 +104,16 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         saidas = {}
 
         if exportar_sat:
-            feedback.pushInfo('Renderizando imagem de satélite (baixando tiles)...')
-            img_path = self._exportar_satelite(extent, crs, idx_sat_fmt, idx_dpi,
+            img_path = self._exportar_satelite(extent, crs, idx_sat_fmt, offset_zoom,
                                                pasta, feedback)
             saidas['SATELITE'] = img_path
             self._carregar_no_projeto(img_path, 'Satélite (exportado)', context)
-        feedback.setProgress(60)
+        feedback.setProgress(70)
 
         if curvas is not None:
             feedback.pushInfo('Exportando curvas de nível...')
             saidas['CURVAS'] = self._exportar_vetor(curvas, idx_formato, pasta, 'curvas')
-        feedback.setProgress(80)
+        feedback.setProgress(85)
 
         if limite is not None:
             feedback.pushInfo('Exportando camada de limite...')
@@ -121,114 +124,156 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         return saidas
 
     # ------------------------------------------------------------------ satélite
-    def _exportar_satelite(self, extent, crs, idx_sat_fmt, idx_dpi, pasta, feedback):
-        dpi = (150, 300, 600)[idx_dpi]
-        larg_px, alt_px = self._tamanho_px(extent, dpi, feedback)
+    def _exportar_satelite(self, extent, crs, idx_sat_fmt, offset_zoom, pasta, feedback):
+        # 1. Área da folha (UTM) -> bbox em EPSG:3857 (CRS das tiles).
+        crs3857 = QgsCoordinateReferenceSystem.fromEpsgId(3857)
+        rect = QgsCoordinateTransform(
+            crs, crs3857, QgsProject.instance()).transformBoundingBox(extent)
 
-        camadas = [l for l in QgsProject.instance().mapLayers().values()
-                   if 'Google Satellite' in l.name()]
-        if not camadas:
-            raise QgsProcessingException(
-                'Camada "Google Satellite" não encontrada no projeto. '
-                'Rode o passo 1 (Carregar Satélite Google) primeiro.')
+        # 2. Melhor zoom que cabe no teto de pixels, menos o offset de qualidade.
+        zoom = self._escolher_zoom(rect, offset_zoom, feedback)
 
-        settings = QgsMapSettings()
-        settings.setExtent(extent)
-        settings.setOutputSize(QSize(larg_px, alt_px))
-        settings.setOutputDpi(dpi)
-        settings.setDestinationCrs(crs)
-        settings.setLayers(camadas)
+        # 3. Baixa e monta o mosaico já recortado na bbox, no melhor zoom.
+        img, bounds3857 = self._baixar_mosaico(rect, zoom, feedback)
 
-        # Render com loop de eventos: sem isso a thread fica bloqueada e as
-        # respostas de rede das tiles XYZ nunca são processadas -> imagem branca.
-        job = QgsMapRendererParallelJob(settings)
-        loop = QEventLoop()
-        job.finished.connect(loop.quit)
-        job.start()
-        if job.isActive():
-            loop.exec_()
-        img = job.renderedImage()
-        if img.isNull():
-            raise QgsProcessingException(
-                'Falha ao renderizar a imagem de satélite (imagem vazia).')
-        # Descarta canal alfa -> RGB limpo de 3 bandas para o OCAD.
-        img = img.convertToFormat(QImage.Format_RGB888)
+        # 4. Georreferencia em 3857 e reprojeta para o CRS da folha (alinha às curvas).
+        tif_utm = os.path.join(pasta, '_satelite_utm.tif')
+        self._georref_e_reprojeta(img, bounds3857, crs, tif_utm)
 
-        px_x = extent.width() / larg_px
-        px_y = extent.height() / alt_px
-        feedback.pushInfo(f'Imagem: {larg_px}×{alt_px}px @ {dpi} DPI '
-                          f'({px_x:.3f} m/px).')
-
-        if idx_sat_fmt == 0:      # GeoTIFF
+        # 5. Salva no formato escolhido.
+        if idx_sat_fmt == 0:
             caminho = os.path.join(pasta, 'satelite_oriifsc.tif')
-            self._salvar_geotiff(img, caminho, extent, crs)
-        elif idx_sat_fmt == 1:    # PNG
-            caminho = os.path.join(pasta, 'satelite_oriifsc.png')
-            if not img.save(caminho, 'PNG'):
-                raise QgsProcessingException('Não foi possível salvar o PNG.')
-            self._world_file(pasta, 'satelite_oriifsc.pgw', extent, px_x, px_y)
-        else:                     # JPEG
-            caminho = os.path.join(pasta, 'satelite_oriifsc.jpg')
-            if not img.save(caminho, 'JPEG', 95):
-                raise QgsProcessingException('Não foi possível salvar o JPEG.')
-            self._world_file(pasta, 'satelite_oriifsc.jgw', extent, px_x, px_y)
-
+            os.replace(tif_utm, caminho)
+        else:
+            ext, nome_wld = ('png', 'pgw') if idx_sat_fmt == 1 else ('jpg', 'jgw')
+            caminho = os.path.join(pasta, f'satelite_oriifsc.{ext}')
+            self._tif_para_imagem(tif_utm, caminho, ext, pasta, nome_wld)
+            try:
+                os.remove(tif_utm)
+            except OSError:
+                pass
         return caminho
 
-    def _tamanho_px(self, extent, dpi, feedback):
-        """Pixels de saída na resolução real da folha (mm × DPI).
-        Usa a escala salva no Passo 2; cai num proporcional ao DPI se ausente."""
-        escala = ler_escala()
-        if escala:
-            larg_mm = extent.width() / escala * 1000.0
-            alt_mm = extent.height() / escala * 1000.0
-            larg_px = max(int(round(larg_mm / 25.4 * dpi)), 1)
-            alt_px = max(int(round(alt_mm / 25.4 * dpi)), 1)
-        else:
-            feedback.pushInfo('Escala não encontrada (Passo 2); usando resolução '
-                              'proporcional ao DPI.')
-            base = int(round((dpi / 300.0) * 5000))
-            if extent.width() >= extent.height():
-                larg_px = base
-                alt_px = max(int(round(base * extent.height() / extent.width())), 1)
-            else:
-                alt_px = base
-                larg_px = max(int(round(base * extent.width() / extent.height())), 1)
+    def _escolher_zoom(self, rect, offset_zoom, feedback):
+        """Maior zoom (<= ZOOM_MAX) cujo mosaico cabe em MAX_PX por lado."""
+        for z in range(ZOOM_MAX, 0, -1):
+            res = _resolucao(z)
+            if rect.width() / res <= MAX_PX and rect.height() / res <= MAX_PX:
+                zoom = max(1, z - offset_zoom)
+                if zoom != z:
+                    feedback.pushInfo(f'Zoom {z} reduzido para {zoom} (qualidade).')
+                feedback.pushInfo(f'Melhor zoom do Google para a folha: {zoom}.')
+                return zoom
+        return 1
 
-        maior = max(larg_px, alt_px)
-        if maior > MAX_PX:
-            fator = MAX_PX / maior
-            larg_px = max(int(larg_px * fator), 1)
-            alt_px = max(int(alt_px * fator), 1)
-            feedback.pushWarning(f'Resolução limitada a {MAX_PX}px por lado '
-                                 'para não estourar a memória.')
-        return larg_px, alt_px
+    def _baixar_mosaico(self, rect, zoom, feedback):
+        """Baixa as tiles que cobrem a bbox e devolve (QImage RGB recortada,
+        (ulx, uly, lrx, lry) em EPSG:3857)."""
+        res = _resolucao(zoom)
+        px_min = (rect.xMinimum() + ORIGIN_SHIFT) / res
+        px_max = (rect.xMaximum() + ORIGIN_SHIFT) / res
+        py_min = (ORIGIN_SHIFT - rect.yMaximum()) / res     # topo (y invertido)
+        py_max = (ORIGIN_SHIFT - rect.yMinimum()) / res     # base
 
-    def _salvar_geotiff(self, img, caminho, extent, crs):
-        """Salva GeoTIFF sem perdas com georreferência embutida (via GDAL).
-        Passa por um PNG temporário (lossless) para não depender do plugin TIFF do Qt."""
+        tx0, tx1 = int(px_min // TILE), int((px_max - 1e-6) // TILE)
+        ty0, ty1 = int(py_min // TILE), int((py_max - 1e-6) // TILE)
+        nx, ny = tx1 - tx0 + 1, ty1 - ty0 + 1
+
+        mosaico = QImage(nx * TILE, ny * TILE, QImage.Format_RGB888)
+        mosaico.fill(0)
+        pintor = QPainter(mosaico)
+        tiles = [(tx, ty) for ty in range(ty0, ty1 + 1) for tx in range(tx0, tx1 + 1)]
+        feedback.pushInfo(f'Baixando {len(tiles)} tiles (zoom {zoom})...')
+
+        falhas = 0
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            for i, (coord, dados) in enumerate(
+                    zip(tiles, pool.map(lambda c: self._baixar_tile(*c, zoom), tiles))):
+                if feedback.isCanceled():
+                    break
+                tx, ty = coord
+                ok = False
+                if dados:
+                    tile = QImage()
+                    if tile.loadFromData(dados):
+                        pintor.drawImage((tx - tx0) * TILE, (ty - ty0) * TILE, tile)
+                        ok = True
+                if not ok:
+                    falhas += 1
+                if i % 25 == 0:
+                    feedback.setProgress(int(60 * i / len(tiles)))
+        pintor.end()
+        if falhas == len(tiles):
+            raise QgsProcessingException(
+                'Não foi possível baixar nenhuma tile do Google. '
+                'Verifique a conexão com a internet.')
+        if falhas:
+            feedback.pushWarning(f'{falhas} tile(s) não baixaram (áreas pretas).')
+
+        # Recorta o mosaico exatamente na bbox e recalcula os limites 3857.
+        esq, topo = int(round(px_min - tx0 * TILE)), int(round(py_min - ty0 * TILE))
+        larg = max(1, int(round(px_max - px_min)))
+        alt = max(1, int(round(py_max - py_min)))
+        recorte = mosaico.copy(esq, topo, larg, alt)
+
+        ulx = (tx0 * TILE + esq) * res - ORIGIN_SHIFT
+        uly = ORIGIN_SHIFT - (ty0 * TILE + topo) * res
+        bounds = (ulx, uly, ulx + larg * res, uly - alt * res)
+        feedback.pushInfo(f'Mosaico: {recorte.width()}×{recorte.height()}px '
+                          f'({res:.3f} m/px em 3857).')
+        return recorte, bounds
+
+    def _baixar_tile(self, tx, ty, zoom):
+        url = TILE_URL.format(x=tx, y=ty, z=zoom)
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': UA})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                return resp.read()
+        except Exception:
+            return None
+
+    def _georref_e_reprojeta(self, img, bounds3857, crs, destino_tif):
+        """Carimba a georreferência 3857 na imagem e reprojeta para o CRS da folha."""
         from osgeo import gdal
-        tmp_png = caminho + '.tmp.png'
+        tmp_png = destino_tif + '.src.png'
+        tmp_3857 = destino_tif + '.3857.tif'
         if not img.save(tmp_png, 'PNG'):
             raise QgsProcessingException('Não foi possível gerar a imagem temporária.')
         try:
-            gdal.Translate(
-                caminho, tmp_png,
-                outputSRS=crs.authid(),
-                outputBounds=[extent.xMinimum(), extent.yMaximum(),
-                              extent.xMaximum(), extent.yMinimum()],
-                creationOptions=['COMPRESS=DEFLATE', 'TILED=YES'])
+            ulx, uly, lrx, lry = bounds3857
+            gdal.Translate(tmp_3857, tmp_png, outputSRS='EPSG:3857',
+                           outputBounds=[ulx, uly, lrx, lry])
+            # dstAlpha: os cantos vazios da reprojeção (faixa preta) viram
+            # transparentes (vale em GeoTIFF/PNG; JPEG não tem alfa).
+            # Lanczos reamostra com mais nitidez que cúbica.
+            gdal.Warp(destino_tif, tmp_3857, dstSRS=crs.authid(),
+                      resampleAlg='lanczos', multithread=True, dstAlpha=True,
+                      creationOptions=['COMPRESS=DEFLATE', 'TILED=YES'])
         finally:
-            try:
-                os.remove(tmp_png)
-            except OSError:
-                pass
+            for f in (tmp_png, tmp_3857):
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
 
-    def _world_file(self, pasta, nome, extent, px_x, px_y):
+    def _tif_para_imagem(self, tif_utm, caminho, ext, pasta, nome_wld):
+        """Converte o GeoTIFF UTM para PNG/JPEG + world file (.pgw/.jgw)."""
+        from osgeo import gdal
+        drv = 'PNG' if ext == 'png' else 'JPEG'
+        # PNG mantém o alfa (transparência); JPEG não suporta, usa só RGB.
+        if ext == 'jpg':
+            opts = {'creationOptions': ['QUALITY=95'], 'bandList': [1, 2, 3]}
+        else:
+            opts = {}
+        gdal.Translate(caminho, tif_utm, format=drv, **opts)
+
+        ds = gdal.Open(tif_utm)
+        gt = ds.GetGeoTransform()
+        ds = None
+        nome = os.path.splitext(os.path.basename(caminho))[0] + '.' + nome_wld
         with open(os.path.join(pasta, nome), 'w') as f:
-            f.write(f'{px_x}\n0.0\n0.0\n-{px_y}\n'
-                    f'{extent.xMinimum() + px_x / 2}\n'
-                    f'{extent.yMaximum() - px_y / 2}\n')
+            f.write(f'{gt[1]}\n0.0\n0.0\n{gt[5]}\n'
+                    f'{gt[0] + gt[1] / 2}\n{gt[3] + gt[5] / 2}\n')
 
     def _carregar_no_projeto(self, caminho, nome, context):
         """Recarrega o arquivo exportado no projeto ao final (na thread principal)."""

@@ -1,4 +1,4 @@
-"""Passo 3 — Camada de Limite.
+"""Camada de Limite.
 
 Cria uma camada 'limite' vazia (polígono) no CRS do projeto e entra em modo de
 edição com a ferramenta de adicionar feição ativa, para o usuário desenhar o

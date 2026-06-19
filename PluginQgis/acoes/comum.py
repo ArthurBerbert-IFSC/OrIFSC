@@ -54,5 +54,5 @@ def avisar_projeto_nao_configurado(parent=None):
     """Aviso padrão quando um passo é chamado sem o projeto estar configurado."""
     QMessageBox.warning(
         parent, 'OrIFSC',
-        'Rode antes o passo "2 — Definir Local e Criar Folha" para configurar o '
+        'Rode antes o passo "Definir Local e Criar Folha" para configurar o '
         'projeto (coordenada, escala e folha).')

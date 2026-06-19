@@ -1,4 +1,4 @@
-"""Criação da camada 'folha' (parte do Passo 2 — Definir Local e Criar Folha).
+"""Criação da camada 'folha' (Definir Local e Criar Folha).
 
 Cria a camada 'folha' (retângulo do tamanho real da folha na escala definida no
 Passo 2), com borda magenta e sem preenchimento. Chamada pelo diálogo de

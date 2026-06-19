@@ -11,6 +11,15 @@ from qgis.core import (
 import processing
 
 
+def _equidistancia_padrao():
+    """Equidistância padrão definida em OrIFSC → Configurações (fallback 5 m)."""
+    try:
+        from qgis.core import QgsSettings
+        return int(QgsSettings().value('OrIFSC/equidistancia_padrao', 5))
+    except Exception:
+        return 5
+
+
 def _ocultar_da_toolbox(alg):
     """Marca o algoritmo como oculto da Caixa de Ferramentas (só acessível pelo menu).
     Compatível com QGIS antigo (FlagHideFromToolbox) e novo (Qgis.ProcessingAlgorithmFlag)."""
@@ -25,30 +34,38 @@ def _ocultar_da_toolbox(alg):
 class GerarCurvasNivel(QgsProcessingAlgorithm):
     LIMITE = 'LIMITE'
     EQUIDISTANCIA = 'EQUIDISTANCIA'
+    RECORTE = 'RECORTE'
     OUTPUT_CURVAS = 'OUTPUT_CURVAS'
 
     def tr(self, s): return s
     def createInstance(self): return GerarCurvasNivel()
     def flags(self): return _ocultar_da_toolbox(self)
     def name(self): return 'gerar_curvas_nivel'
-    def displayName(self): return '4. Gerar Curvas de Nível Automáticas'
+    def displayName(self): return 'Gerar Curvas de Nível Automáticas'
     def group(self): return 'Orientação'
     def groupId(self): return 'orientacao'
-    def shortHelpString(self): return ('Baixa o MDT Copernicus 30m (gratuito, sem API key) '
-                                       'e gera curvas de nível suavizadas para a área da folha.')
+    def shortHelpString(self):
+        from ..acoes.painel import painel_html, INSTRUCOES
+        return painel_html('Gerar Curvas de Nível', INSTRUCOES['gerar_curvas'])
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFeatureSource(
-            self.LIMITE, 'Camada da Folha (área a mapear)', [QgsProcessing.TypeVectorPolygon]))
+            self.LIMITE, 'Camada da área a mapear (define a extensão do MDT)',
+            [QgsProcessing.TypeVectorPolygon]))
         self.addParameter(QgsProcessingParameterNumber(
             self.EQUIDISTANCIA, 'Equidistância (metros)',
-            type=QgsProcessingParameterNumber.Integer, defaultValue=5))
+            type=QgsProcessingParameterNumber.Integer,
+            defaultValue=_equidistancia_padrao()))
+        self.addParameter(QgsProcessingParameterFeatureSource(
+            self.RECORTE, 'Recortar curvas por (camada — opcional: folha ou limite)',
+            [QgsProcessing.TypeVectorPolygon], optional=True))
         self.addParameter(QgsProcessingParameterVectorDestination(
             self.OUTPUT_CURVAS, 'Salvar Curvas como'))
 
     def processAlgorithm(self, parameters, context, feedback):
         camada_limite = self.parameterAsSource(parameters, self.LIMITE, context)
         equidistancia = self.parameterAsInt(parameters, self.EQUIDISTANCIA, context)
+        camada_recorte = self.parameterAsVectorLayer(parameters, self.RECORTE, context)
         saida_curvas = self.parameterAsOutputLayer(parameters, self.OUTPUT_CURVAS, context)
 
         crs_wgs84 = QgsCoordinateReferenceSystem('EPSG:4326')
@@ -100,13 +117,37 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
 
         feedback.setProgress(80)
         feedback.pushInfo('Suavizando geometria...')
-        processing.run('native:smoothgeometry', {
+        # Quando há recorte, a suavização vai para um temporário e o recorte
+        # escreve a saída final; sem recorte, a suavização já é a saída.
+        destino_suave = 'TEMPORARY_OUTPUT' if camada_recorte is not None else saida_curvas
+        suavizadas = processing.run('native:smoothgeometry', {
             'INPUT': curvas_brutas,
             'ITERATIONS': 3,
             'OFFSET': 0.25,
             'MAX_ANGLE': 180,
-            'OUTPUT': saida_curvas,
-        }, context=context, feedback=feedback)
+            'OUTPUT': destino_suave,
+        }, context=context, feedback=feedback)['OUTPUT']
+
+        if camada_recorte is not None:
+            feedback.setProgress(90)
+            crs_recorte = camada_recorte.crs()
+            # As curvas saem em EPSG:4326 (CRS do MDT). Reprojeta para o CRS da
+            # camada de recorte para cortar corretamente e alinhar à folha (UTM).
+            entrada_clip = suavizadas
+            if crs_recorte != crs_wgs84:
+                feedback.pushInfo(f'Reprojetando curvas para {crs_recorte.authid()}...')
+                entrada_clip = processing.run('native:reprojectlayer', {
+                    'INPUT': suavizadas,
+                    'TARGET_CRS': crs_recorte,
+                    'OUTPUT': 'TEMPORARY_OUTPUT',
+                }, context=context, feedback=feedback)['OUTPUT']
+
+            feedback.pushInfo(f'Recortando curvas pela camada "{camada_recorte.name()}"...')
+            processing.run('native:clip', {
+                'INPUT': entrada_clip,
+                'OVERLAY': camada_recorte,
+                'OUTPUT': saida_curvas,
+            }, context=context, feedback=feedback)
 
         feedback.setProgress(100)
         return {self.OUTPUT_CURVAS: saida_curvas}

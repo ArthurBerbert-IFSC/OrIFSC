@@ -1,0 +1,19 @@
+Coloque aqui os 3 logotipos em PNG (de preferência com fundo transparente):
+
+  oriesc.png  — Federação Catarinense de Orientação
+  ifsc.png    — Instituto Federal de Santa Catarina
+  flora.png   — Clube de Orientação de Florianópolis
+
+Eles aparecem no painel lateral das janelas do plugin (Definir Local,
+Configurações, Gerar Curvas de Nível, Exportar para o OCAD) e na janela
+"Sobre o OrIFSC".
+
+Recomendações:
+  - São renderizados com ~40 px de altura; use imagens com pelo menos
+    ~120 px de altura para ficarem nítidos.
+  - Fundo transparente para casar com o fundo claro do painel.
+  - Mantenha exatamente estes nomes de arquivo (minúsculos).
+
+Enquanto os arquivos não existirem, o painel mostra só o título e as
+instruções (sem quebrar o layout). Assim que forem adicionados, as logos
+aparecem automaticamente.
