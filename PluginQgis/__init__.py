@@ -9,5 +9,5 @@ def classFactory(iface):
             except Exception:
                 pass
 
-    from .oriifsc import OrIFSCPlugin
+    from .orifsc import OrIFSCPlugin
     return OrIFSCPlugin(iface)
