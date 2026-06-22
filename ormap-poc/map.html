@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <title>OrMap POC</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; }
+        #map { height: 100vh; width: 100vw; }
+
+        #toolbar {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            min-width: 170px;
+            text-align: left;
+        }
+        .btn-export { background: #2563eb; color: white; }
+        .btn-export:hover { background: #1d4ed8; }
+        .btn-clear  { background: #dc2626; color: white; }
+        .btn-clear:hover  { background: #b91c1c; }
+
+        #feature-count {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 4px 14px;
+            border-radius: 12px;
+            font-size: 12px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div id="toolbar">
+        <button class="btn btn-export" onclick="exportGeoJSON()">&#8595; Exportar GeoJSON</button>
+        <button class="btn btn-clear"  onclick="clearAll()">&#x2715; Limpar feições</button>
+    </div>
+
+    <div id="feature-count">0 feições</div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script>
+        const map = L.map('map').setView([-27.5954, -48.5480], 13);
+
+        const baseLayers = {
+            'Satélite Google': L.tileLayer(
+                'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+                { maxZoom: 20, attribution: '© Google' }
+            ),
+            'OpenStreetMap': L.tileLayer(
+                'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                { maxZoom: 19, attribution: '© OpenStreetMap contributors' }
+            )
+        };
+        baseLayers['Satélite Google'].addTo(map);
+        L.control.layers(baseLayers).addTo(map);
+
+        const drawnItems = new L.FeatureGroup().addTo(map);
+
+        map.addControl(new L.Control.Draw({
+            edit: { featureGroup: drawnItems },
+            draw: {
+                polygon:   { shapeOptions: { color: '#ef4444', weight: 2, fillOpacity: 0.15 } },
+                polyline:  { shapeOptions: { color: '#3b82f6', weight: 2 } },
+                rectangle: { shapeOptions: { color: '#22c55e', weight: 2, fillOpacity: 0.15 } },
+                marker:        true,
+                circle:        false,
+                circlemarker:  false
+            }
+        }));
+
+        function updateCount() {
+            const n = drawnItems.getLayers().length;
+            document.getElementById('feature-count').textContent =
+                n === 0 ? '0 feições' : `${n} feição${n !== 1 ? 'ões' : ''}`;
+        }
+        map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); updateCount(); });
+        map.on(L.Draw.Event.DELETED, updateCount);
+
+        let backend = null;
+        if (typeof QWebChannel !== 'undefined') {
+            new QWebChannel(qt.webChannelTransport, ch => { backend = ch.objects.backend; });
+        }
+
+        function exportGeoJSON() {
+            const geojson = drawnItems.toGeoJSON();
+            if (geojson.features.length === 0) {
+                alert('Desenhe pelo menos uma feição antes de exportar.');
+                return;
+            }
+            if (backend) {
+                backend.exportGeoJSON(JSON.stringify(geojson));
+            } else {
+                const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'mapa.geojson';
+                a.click();
+            }
+        }
+
+        function clearAll() {
+            if (drawnItems.getLayers().length === 0) return;
+            if (confirm('Limpar todas as feições desenhadas?')) {
+                drawnItems.clearLayers();
+                updateCount();
+            }
+        }
+    </script>
+</body>
+</html>
