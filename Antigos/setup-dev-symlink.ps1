@@ -9,7 +9,7 @@ if (-not $isAdmin) {
     exit 1
 }
 
-$pluginSourceDir = "d:\Visual Studio\OrIFSC\OriPy\PluginQgis"
+$pluginSourceDir = "d:\Visual Studio\OrIFSC\OrIFSC\PluginQgis"
 $pluginsTargetDir = "C:\Users\$env:USERNAME\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins"
 $pluginLinkPath = Join-Path $pluginsTargetDir "OrIFSC"
 

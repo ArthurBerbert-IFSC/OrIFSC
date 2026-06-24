@@ -15,7 +15,7 @@ Este guia configura o plugin para desenvolvimento com recarga automática (hot r
 ```powershell
 # 1. Clique com botão direito em PowerShell → "Executar como Administrador"
 # 2. Navegue para a pasta do projeto:
-cd "d:\Visual Studio\OrIFSC\OriPy"
+cd "d:\Visual Studio\OrIFSC\OrIFSC"
 
 # 3. Execute o script:
 .\setup-dev-symlink.ps1
@@ -82,9 +82,9 @@ Salva → Reload → Abre a Caixa de Ferramentas → vê o novo texto. ✨
 ## 5️⃣ Estrutura de Pastas
 
 ```
-OrIFSC (symlink) → d:\Visual Studio\OrIFSC\OriPy\PluginQgis\
+OrIFSC (symlink) → d:\Visual Studio\OrIFSC\OrIFSC\PluginQgis\
 ├── __init__.py              (com reload automático)
-├── oriifsc.py               (ponto de entrada / menu)
+├── orifsc.py                (ponto de entrada / menu)
 ├── provider.py              (com reload automático)
 ├── metadata.txt             (informações do plugin)
 ├── icons/
@@ -128,7 +128,7 @@ OrIFSC (symlink) → d:\Visual Studio\OrIFSC\OriPy\PluginQgis\
 Se houver erro de sintaxe no código, o reload pode falhar silenciosamente:
 - Verifique a **Compilação** do arquivo:
   ```powershell
-  cd "d:\Visual Studio\OrIFSC\OriPy"
+  cd "d:\Visual Studio\OrIFSC\OrIFSC"
   python -m py_compile PluginQgis/algorithms/gerar_curvas.py
   ```
 - Corrija o erro de sintaxe
