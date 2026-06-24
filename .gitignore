@@ -7,5 +7,8 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Dado pesado de articulação SC (não faz parte do plugin; não referenciado pelo código)
-PluginQgis/sigsc_articulacao_50k_10k.geojson
+# Artefato de build do plugin — gerado pelo workflow (qgis-plugin-ci). Nao versionar.
+*.zip
+
+# Pasta de arquivos antigos/locais — fica so na sua maquina, nao vai para o GitHub.
+Antigos/

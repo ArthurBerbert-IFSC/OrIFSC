@@ -1,0 +1,9 @@
+# Configuracao do qgis-plugin-ci (https://opengisch.github.io/qgis-plugin-ci/)
+# Usado pelo workflow .github/workflows/release.yml para empacotar e publicar.
+
+# Pasta que contem o metadata.txt do plugin (vira a pasta de topo do .zip = nome de instalacao).
+plugin_path: OrIFSC
+
+# Usados para montar links de changelog/release.
+github_organization_slug: ArthurBerbert-IFSC
+project_slug: OriPy

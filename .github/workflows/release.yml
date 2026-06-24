@@ -1,0 +1,35 @@
+name: Publicar plugin OrIFSC
+
+# Dispara ao empurrar uma tag de versao no formato X.Y.Z, por exemplo:
+#   git tag 0.1.6
+#   git push origin 0.1.6
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # permite anexar o .zip ao GitHub Release da tag
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # qgis-plugin-ci precisa do historico e das tags
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Instalar qgis-plugin-ci
+        run: pip install qgis-plugin-ci
+
+      - name: Empacotar e publicar no plugins.qgis.org
+        run: >-
+          qgis-plugin-ci release ${{ github.ref_name }}
+          --osgeo-username "${{ secrets.OSGEO_USERNAME }}"
+          --osgeo-password "${{ secrets.OSGEO_PASSWORD }}"
+          --github-token "${{ secrets.GITHUB_TOKEN }}"
