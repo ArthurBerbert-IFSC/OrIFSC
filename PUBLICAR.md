@@ -8,7 +8,7 @@ A publicacao no [plugins.qgis.org](https://plugins.qgis.org) e **automatica** vi
 
 Adicione suas credenciais do OSGeo como *secrets* do repositorio no GitHub:
 
-1. GitHub > repositorio **OriPy** > **Settings** > **Secrets and variables** > **Actions**
+1. GitHub > repositorio **OrIFSC** > **Settings** > **Secrets and variables** > **Actions**
 2. **New repository secret** e crie os dois:
    - `OSGEO_USERNAME` = seu usuario do OSGeo (o mesmo de login no plugins.qgis.org)
    - `OSGEO_PASSWORD` = sua senha do OSGeo
