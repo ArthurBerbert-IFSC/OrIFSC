@@ -23,6 +23,15 @@ MAX_PX = 16384                              # teto por lado do mosaico
 TILE_URL = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
 UA = 'Mozilla/5.0 (QGIS OrIFSC plugin)'
 
+# Normas de simbologia: rótulo no diálogo, prefixo do arquivo-modelo
+# (`<prefixo>_<escala>.ocd|.omap` em recursos/templates) e código do símbolo de
+# curva de nível a que as curvas são vinculadas.
+NORMAS = [
+    {'rotulo': 'ISOM 2017-2', 'prefixo': 'isom2017_2', 'codigo_curva': 101},
+    {'rotulo': 'ISSprOM 2019', 'prefixo': 'issprom2019', 'codigo_curva': 101},
+    {'rotulo': 'ISMTBOM', 'prefixo': 'ismtbom', 'codigo_curva': 101},
+]
+
 
 def _resolucao(zoom):
     """Metros por pixel (em EPSG:3857) no nível de zoom dado."""
@@ -42,6 +51,7 @@ def _ocultar_da_toolbox(alg):
 
 class ExportarOCAD(QgsProcessingAlgorithm):
     FOLHA = 'FOLHA'
+    NORMA = 'NORMA'
     EXPORTAR_SATELITE = 'EXPORTAR_SATELITE'
     QUALIDADE = 'QUALIDADE'
     CURVAS = 'CURVAS'
@@ -81,6 +91,9 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         self.addParameter(QgsProcessingParameterFeatureSource(
             self.FOLHA, 'Camada da Folha (define a área e a georreferência)',
             [QgsProcessing.TypeVectorPolygon]))
+        self.addParameter(QgsProcessingParameterEnum(
+            self.NORMA, 'Norma de simbologia (conjunto de símbolos embutido)',
+            options=[n['rotulo'] for n in NORMAS], defaultValue=0))
         self.addParameter(QgsProcessingParameterBoolean(
             self.EXPORTAR_SATELITE, 'Incluir satélite como mapa de fundo',
             defaultValue=True))
@@ -107,6 +120,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         from .ocad.projeto import centro_latlon
 
         folha = self.parameterAsSource(parameters, self.FOLHA, context)
+        norma = self.parameterAsEnum(parameters, self.NORMA, context)
         exportar_sat = self.parameterAsBool(parameters, self.EXPORTAR_SATELITE, context)
         offset_zoom = self.parameterAsInt(parameters, self.QUALIDADE, context)
         curvas = self.parameterAsVectorLayer(parameters, self.CURVAS, context)
@@ -160,23 +174,51 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         feedback.pushInfo(f'Declinação usada: {declinacao:.2f}°.')
         feedback.setProgress(80)
 
-        # 4. Monta o projeto e escreve os dois formatos.
-        proj = ProjetoOcad(escala, epsg, rect, declinacao, linhas, satelite)
+        # 4. Resolve os modelos de simbologia (norma + escala) e monta o projeto.
+        ocd_tpl, omap_tpl, codigo_curva = self._resolver_modelos(
+            norma, escala, feedback)
+        proj = ProjetoOcad(escala, epsg, rect, declinacao, linhas, satelite,
+                           codigo_simbolo=codigo_curva)
         feedback.pushInfo(f'Convergência meridiana: {proj.convergencia:.2f}° | '
                           f'grivação (norte magnético): {proj.grivacao:.2f}°.')
 
+        # 5. Escreve os dois formatos (sobre o modelo, quando disponível).
         omap = os.path.join(pasta, 'projeto_oriifsc.omap')
         ocd = os.path.join(pasta, 'projeto_oriifsc.ocd')
         feedback.pushInfo('Gerando projeto OpenOrienteering Mapper (.omap)...')
-        escrever_omap(proj, omap)
+        escrever_omap(proj, omap, template=omap_tpl)
         feedback.pushInfo('Gerando projeto OCAD 9 (.ocd)...')
-        escrever_ocd_v9(proj, ocd)
+        escrever_ocd_v9(proj, ocd, template=ocd_tpl)
         feedback.setProgress(100)
 
         feedback.pushInfo(f'Projetos gerados em: {pasta}')
         return {'OMAP': omap, 'OCD': ocd}
 
     # ------------------------------------------------------------------ apoio
+    def _resolver_modelos(self, norma_idx, escala, feedback):
+        """Resolve os modelos (.ocd/.omap) da combinação norma + escala.
+
+        Devolve (ocd_template, omap_template, codigo_curva). Cada template é o
+        caminho do arquivo-mestre `recursos/templates/<prefixo>_<escala>.<ext>`
+        quando existe; senão é None (com aviso) e o formato cai no comportamento
+        de só curvas."""
+        cfg = NORMAS[norma_idx]
+        base = os.path.join(os.path.dirname(__file__), '..', 'recursos', 'templates')
+        modelos = {}
+        for ext in ('ocd', 'omap'):
+            nome = '%s_%d.%s' % (cfg['prefixo'], int(escala), ext)
+            caminho = os.path.join(base, nome)
+            if os.path.exists(caminho):
+                modelos[ext] = caminho
+                feedback.pushInfo(f'Modelo de simbologia ({ext.upper()}): {nome}.')
+            else:
+                modelos[ext] = None
+                feedback.pushWarning(
+                    f'Modelo de simbologia "{nome}" não encontrado em '
+                    f'recursos/templates. O {ext.upper()} sairá só com as curvas '
+                    f'(sem a paleta completa de {cfg["rotulo"]}).')
+        return modelos['ocd'], modelos['omap'], cfg['codigo_curva']
+
     def _epsg_utm(self, crs):
         authid = crs.authid()                       # ex.: 'EPSG:32722'
         if not authid.startswith('EPSG:'):

@@ -24,7 +24,7 @@ Exportar: Exporte a base final diretamente para OCAD ou OOM e comece a desenhar.
 
 [ ] Integração com modelo de elevação FABDEM.
 [ ] Geração de curvas de nível a partir de qualquer Raster/WMS (ex: MDT do SIG@SC).
-[ ] Inclusão automática de simbologia completa na exportação (ligação com arquivos de referência .crt).
+[x] Inclusão automática de simbologia completa na exportação (a partir de modelos por norma e escala em `OrIFSC/recursos/templates`).
 [ ] Importação de arquivos GPX e KML.
 
 📝 Créditos e Licença

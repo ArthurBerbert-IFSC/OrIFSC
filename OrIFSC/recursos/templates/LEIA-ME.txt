@@ -1,0 +1,37 @@
+Modelos de simbologia (símbolos-mestre) para a exportação OCAD / OOM
+====================================================================
+
+A ferramenta "Gerar Projeto OCAD / OOM" embute a simbologia completa da norma
+escolhida no arquivo exportado, abrindo um arquivo-modelo daqui e injetando nele
+a georreferência, as curvas de nível e o satélite de fundo do projeto.
+
+Os modelos são ativos do repositório, mantidos pelo dev (não pelo usuário final).
+
+Nome dos arquivos
+-----------------
+    <prefixo>_<escala>.ocd     (OCAD 9)
+    <prefixo>_<escala>.omap    (OpenOrienteering Mapper)
+
+Prefixos por norma:
+    ISOM 2017-2  -> isom2017_2
+    ISSprOM 2019 -> issprom2019
+    ISMTBOM      -> ismtbom
+
+Exemplos:
+    isom2017_2_15000.ocd / .omap
+    isom2017_2_10000.ocd / .omap
+    issprom2019_4000.ocd / .omap
+
+A escala é a do projeto (definida em "Definir Local e Criar Folha"). Se o modelo
+da combinação norma+escala não existir, a exportação avisa e gera só as curvas.
+
+Como gerar os modelos (a partir do .isc, que é a fonte de verdade)
+------------------------------------------------------------------
+1. No OpenOrienteering Mapper, crie um mapa novo na ESCALA desejada e carregue o
+   conjunto de símbolos (.isc) da norma.
+2. Salve como .omap  -> vira o modelo <prefixo>_<escala>.omap
+3. Exporte para OCAD (.ocd, versão 9) -> vira o modelo <prefixo>_<escala>.ocd
+4. Copie os dois arquivos para esta pasta com o nome padronizado.
+
+Requisito: cada modelo precisa conter o símbolo de curva de nível (código 101 no
+ISOM/ISSprOM). As curvas exportadas são vinculadas a esse símbolo.

@@ -94,6 +94,12 @@ class _OcdWriter:
         entry = struct.pack('<IIiI', 0, len(dados), tipo, 0)
         self._insert(self.first_string, _STR_ENTRY, 0, entry, dados)
 
+    def add_string_raw(self, tipo, dados, obj_index=0):
+        """Copia uma parameter string já codificada (com o terminador nulo),
+        usada para preservar as strings do modelo (cores etc.)."""
+        entry = struct.pack('<IIiI', 0, len(dados), tipo, obj_index)
+        self._insert(self.first_string, _STR_ENTRY, 0, entry, dados)
+
     def add_symbol(self, dados):
         entry = struct.pack('<I', 0)
         self._insert(self.first_symbol, _SYM_ENTRY, 0, entry, dados)
@@ -144,7 +150,107 @@ def _objeto_bytes(proj, linha):
     return dados, bounds, numero
 
 
-def escrever_ocd_v9(proj, caminho):
+def _ler_template_ocd(caminho):
+    """Lê um .ocd-mestre e devolve (strings, simbolos):
+
+    - `strings`: lista de (tipo, obj_index, bytes) das parameter strings em uso
+      (entradas com pos != 0) — inclui a tabela de cores completa (tipo 9);
+    - `simbolos`: lista de bytes crus de cada símbolo (paleta completa).
+
+    Espelha a leitura de OcdEntityIndex: blocos de índice encadeados por
+    `next_block`, com o tamanho de cada símbolo no 1º u32 do BaseSymbolV9."""
+    with open(caminho, 'rb') as f:
+        ba = f.read()
+
+    first_symbol = _u32(ba, 8)
+    first_string = _u32(ba, 32)
+
+    strings = []
+    bloco = first_string
+    while bloco:
+        for i in range(256):
+            epos = bloco + 4 + i * _STR_ENTRY
+            pos, size, tipo, obj_idx = struct.unpack_from('<IIiI', ba, epos)
+            if pos and size:
+                strings.append((tipo, obj_idx, bytes(ba[pos:pos + size])))
+        bloco = _u32(ba, bloco)
+
+    simbolos = []
+    bloco = first_symbol
+    while bloco:
+        for i in range(256):
+            pos = _u32(ba, bloco + 4 + i * _SYM_ENTRY)
+            if pos:
+                size = _u32(ba, pos)
+                simbolos.append(bytes(ba[pos:pos + size]))
+        bloco = _u32(ba, bloco)
+
+    return strings, simbolos
+
+
+def _georef_string(proj):
+    """String 1039 (georreferência) no formato dos campos do OCD."""
+    return '\tm%d\tg%.4f\tr1\tx%d\ty%d\ta%.8f\td%.6f\ti%d' % (
+        proj.escala, 50.0, round(proj.ref_e), round(proj.ref_n),
+        proj.grivacao, 500.0, proj.i_grade)
+
+
+def _satelite_string(proj):
+    """String 8 (mapa de fundo) para a imagem de satélite, ou None."""
+    if not proj.satelite:
+        return None
+    nome = os.path.basename(proj.satelite['path'])
+    mcx, mcy = proj.satelite['centro_mm']
+    return ('%s\ts1\tx%.6f\ty%.6f\ta%.8f\tu%.10f\tv%.10f\td0\tp\tt0\to0\tb%.6f'
+            % (nome, mcx, -mcy, proj.grivacao,
+               proj.satelite['u_mm'], proj.satelite['v_mm'], proj.grivacao))
+
+
+def escrever_ocd_v9(proj, caminho, template=None):
+    """Gera o .ocd (OCAD 9) em `caminho` a partir de um ProjetoOcad.
+
+    Com `template` (um .ocd-mestre), preserva toda a paleta de cores e símbolos
+    dele e injeta o projeto por cima; sem modelo, escreve do zero com um único
+    símbolo de curva (fallback)."""
+    if template and os.path.exists(template):
+        return _escrever_com_modelo(proj, caminho, template)
+    return _escrever_do_zero(proj, caminho)
+
+
+def _escrever_com_modelo(proj, caminho, template):
+    strings, simbolos = _ler_template_ocd(template)
+    w = _OcdWriter()
+
+    # Strings do modelo, menos georreferência (1039) e fundo (8) — que o projeto
+    # regenera. Preserva a tabela de cores (tipo 9) e os números de cor.
+    for tipo, obj_idx, dados in strings:
+        if tipo in (1039, 8):
+            continue
+        w.add_string_raw(tipo, dados, obj_idx)
+
+    # Georreferência do projeto.
+    w.add_string(1039, _georef_string(proj))
+
+    # Símbolos do modelo (paleta completa).
+    for dados in simbolos:
+        w.add_symbol(dados)
+
+    # Curvas como objetos de linha (referenciam o símbolo pelo número).
+    for linha in proj.linhas_mm:
+        dados, bounds, numero = _objeto_bytes(proj, linha)
+        w.add_object(dados, bounds, numero, 2, 0)
+
+    # Satélite como mapa de fundo (string 8).
+    sat = _satelite_string(proj)
+    if sat is not None:
+        w.add_string(8, sat)
+
+    with open(caminho, 'wb') as f:
+        f.write(w.ba)
+    return caminho
+
+
+def _escrever_do_zero(proj, caminho):
     """Gera o .ocd (OCAD 9) em `caminho` a partir de um ProjetoOcad."""
     w = _OcdWriter()
 
@@ -155,9 +261,7 @@ def escrever_ocd_v9(proj, caminho):
         round(y * 100), round(k * 100)))
 
     # --- Georreferência (string 1039) -------------------------------------
-    w.add_string(1039, '\tm%d\tg%.4f\tr1\tx%d\ty%d\ta%.8f\td%.6f\ti%d' % (
-        proj.escala, 50.0, round(proj.ref_e), round(proj.ref_n),
-        proj.grivacao, 500.0, proj.i_grade))
+    w.add_string(1039, _georef_string(proj))
 
     # --- Símbolo de curva -------------------------------------------------
     w.add_symbol(_simbolo_linha_bytes(proj))
@@ -168,14 +272,9 @@ def escrever_ocd_v9(proj, caminho):
         w.add_object(dados, bounds, numero, 2, 0)
 
     # --- Satélite como mapa de fundo (string 8) ---------------------------
-    if proj.satelite:
-        nome = os.path.basename(proj.satelite['path'])
-        mcx, mcy = proj.satelite['centro_mm']
-        w.add_string(8, '%s\ts1\tx%.6f\ty%.6f\ta%.8f\tu%.10f\tv%.10f'
-                        '\td0\tp\tt0\to0\tb%.6f' % (
-                            nome, mcx, -mcy, proj.grivacao,
-                            proj.satelite['u_mm'], proj.satelite['v_mm'],
-                            proj.grivacao))
+    sat = _satelite_string(proj)
+    if sat is not None:
+        w.add_string(8, sat)
 
     with open(caminho, 'wb') as f:
         f.write(w.ba)

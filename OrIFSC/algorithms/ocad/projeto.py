@@ -39,7 +39,7 @@ class ProjetoOcad:
     """Reúne tudo que os escritores precisam para gerar o projeto."""
 
     def __init__(self, escala, epsg, folha_rect, declinacao, linhas_mundo,
-                 satelite=None):
+                 satelite=None, codigo_simbolo=CODIGO_SIMBOLO):
         self.escala = int(escala)
         self.epsg = int(epsg)
         self.zona, self.sul = zona_utm_de_epsg(self.epsg)
@@ -74,7 +74,7 @@ class ProjetoOcad:
         self.cor = COR_CURVA
         self.cor_nome = COR_NOME
         self.largura_um = LARGURA_CURVA_UM
-        self.codigo_simbolo = CODIGO_SIMBOLO
+        self.codigo_simbolo = int(codigo_simbolo)
 
         # Converte as curvas para mm de papel (y para baixo).
         self.linhas_mm = [
