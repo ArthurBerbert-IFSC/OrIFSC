@@ -66,6 +66,9 @@ class OrIFSCPlugin:
                 {'titulo': 'OpenStreetMap', 'slot': self._base_osm, 'icone': 'osm.svg'},
                 {'titulo': 'Adicionar WMS/WMTS…', 'slot': self._base_wms, 'icone': 'wms.svg'},
             ]},
+            {'titulo': 'Importar', 'itens': [
+                {'titulo': 'Importar KML / GPX…', 'slot': self._importar_kml_gpx, 'icone': ''},
+            ]},
             {'titulo': 'Relevo', 'itens': [
                 {'titulo': 'Gerar Curvas de Nível', 'slot': self._gerar_curvas, 'icone': 'curvas.svg'},
                 {'titulo': 'Fonte de DEM: FABDEM (em breve)', 'slot': None,
@@ -140,6 +143,11 @@ class OrIFSCPlugin:
     def _base_wms(self):
         from .acoes.bases import abrir_gerenciador_wms
         abrir_gerenciador_wms(self.iface, self.iface.mainWindow())
+
+    def _importar_kml_gpx(self):
+        from .acoes.importar_kml_gpx import DialogImportarKmlGpx
+        dlg = DialogImportarKmlGpx(self.iface, self.iface.mainWindow())
+        dlg.exec_()
 
     def _gerar_curvas(self):
         import processing

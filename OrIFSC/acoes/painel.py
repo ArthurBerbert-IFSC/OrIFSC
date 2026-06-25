@@ -99,6 +99,16 @@ INSTRUCOES = {
         '<p>Opcionalmente recorta as curvas exatamente na borda de uma camada '
         '(a folha ou o limite). Deixe o recorte em branco para não recortar.</p>'
     ),
+    'importar_kml_gpx': (
+        '<p>Selecione um arquivo <b>.kml</b> ou <b>.gpx</b> para adicionar ao '
+        'projeto como camada vetorial.</p>'
+        '<ul>'
+        '<li><b>GPX</b> — escolha quais sub-camadas importar: '
+        'trilhas, rotas e/ou waypoints.</li>'
+        '<li><b>KML</b> — importado diretamente; todas as feições são carregadas.</li>'
+        '</ul>'
+        '<p>O mapa é centralizado automaticamente na extensão do arquivo importado.</p>'
+    ),
     'exportar_ocad': (
         '<p>Gera um <b>projeto pronto para abrir</b>, já configurado, em dois '
         'formatos a partir da folha:</p>'
