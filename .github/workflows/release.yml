@@ -30,6 +30,5 @@ jobs:
       - name: Empacotar e publicar no plugins.qgis.org
         run: >-
           qgis-plugin-ci release ${{ github.ref_name }}
-          --osgeo-username "${{ secrets.OSGEO_USERNAME }}"
-          --osgeo-password "${{ secrets.OSGEO_PASSWORD }}"
+          --qgis-token "${{ secrets.QGIS_TOKEN }}"
           --github-token "${{ secrets.GITHUB_TOKEN }}"
