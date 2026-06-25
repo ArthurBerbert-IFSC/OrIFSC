@@ -27,6 +27,17 @@ jobs:
       - name: Instalar qgis-plugin-ci
         run: pip install qgis-plugin-ci
 
+      # qgis-plugin-ci, quando recebe --github-token, exige que o GitHub Release
+      # da tag ja exista (senao falha com GithubReleaseNotFound). O push de tag
+      # sozinho nao cria Release, entao criamos aqui (idempotente).
+      - name: Criar GitHub Release da tag (se ainda nao existir)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}"
+          || gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}"
+          --title "${{ github.ref_name }}" --generate-notes
+
       - name: Empacotar e publicar no plugins.qgis.org
         run: >-
           qgis-plugin-ci release ${{ github.ref_name }}
