@@ -1,9 +1,11 @@
-"""Escritor de arquivo .ocd binário (OCAD 9 / formato versão 9).
+"""Escritor de arquivo .ocd binário (OCAD 10 / formato versão 10).
 
 Portado das estruturas e da lógica de exportação do OpenOrienteering Mapper
 (GPLv3): `ocd_types.h`, `ocd_types_v8.h`, `ocd_types_v9.h`, `ocd_types.cpp`
 (montagem de blocos) e `ocd_file_export.cpp` (strings 9/1039/8, símbolo de linha
-e objetos). Tudo little-endian e com structs "packed" (sem alinhamento).
+e objetos). O formato v10 é estruturalmente idêntico ao v9 (no OOM,
+`ocd_types_v10.h` é apenas `using FormatV10 = FormatV9;`); muda só o número de
+versão no cabeçalho. Tudo little-endian e com structs "packed" (sem alinhamento).
 
 Modelo de coordenadas do OCD: 1/100 mm de papel, y para cima, valor deslocado 8
 bits à esquerda (os 8 bits baixos guardam flags de vértice, aqui sempre 0).
@@ -13,7 +15,7 @@ import os
 import struct
 
 VENDOR = 0x0CAD
-VERSION = 9
+VERSION = 10
 FATOR_SIMBOLO = 1000                 # BaseSymbolV9::symbol_number_factor
 
 _STR_ENTRY = 16                      # ParameterStringIndexEntry
@@ -144,8 +146,8 @@ def _objeto_bytes(proj, linha):
     return dados, bounds, numero
 
 
-def escrever_ocd_v9(proj, caminho):
-    """Gera o .ocd (OCAD 9) em `caminho` a partir de um ProjetoOcad."""
+def escrever_ocd_v10(proj, caminho):
+    """Gera o .ocd (OCAD 10) em `caminho` a partir de um ProjetoOcad."""
     w = _OcdWriter()
 
     # --- Cor da curva (string 9) ------------------------------------------

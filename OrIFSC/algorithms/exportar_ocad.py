@@ -1,6 +1,7 @@
 import datetime
 import math
 import os
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 from qgis.core import (
@@ -9,6 +10,7 @@ from qgis.core import (
     QgsProcessingParameterBoolean, QgsProcessingParameterNumber,
     QgsProcessingParameterFolderDestination,
     QgsProcessingException, QgsProcessing, QgsProject, QgsProcessingContext,
+    QgsProcessingUtils,
     QgsCoordinateReferenceSystem, QgsCoordinateTransform,
 )
 from qgis.PyQt.QtGui import QImage, QPainter, QIcon
@@ -47,6 +49,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
     CURVAS = 'CURVAS'
     DECL_AUTO = 'DECL_AUTO'
     DECL_MANUAL = 'DECL_MANUAL'
+    FORMATO = 'FORMATO'
     PASTA = 'PASTA'
 
     def tr(self, s):
@@ -95,14 +98,22 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             self.DECL_AUTO, 'Calcular declinação magnética automaticamente (WMM/NOAA)',
             defaultValue=True))
         self.addParameter(QgsProcessingParameterNumber(
-            self.DECL_MANUAL, 'Declinação magnética manual (graus, leste +)',
+            self.DECL_MANUAL,
+            'Declinação magnética manual (graus, leste +; usada se o automático '
+            'estiver desmarcado ou falhar)',
             type=QgsProcessingParameterNumber.Double, defaultValue=0.0,
             minValue=-90.0, maxValue=90.0))
+        self.addParameter(QgsProcessingParameterEnum(
+            self.FORMATO, 'Formato(s) a gerar',
+            options=['OCAD (.ocd)',
+                     'OpenOrienteering Mapper (.omap)',
+                     'Ambos (.ocd e .omap)'],
+            defaultValue=0))   # 0 = Só OCAD por padrão
         self.addParameter(QgsProcessingParameterFolderDestination(
             self.PASTA, 'Pasta de saída'))
 
     def processAlgorithm(self, parameters, context, feedback):
-        from .ocad import ProjetoOcad, escrever_omap, escrever_ocd_v9
+        from .ocad import ProjetoOcad, escrever_omap, escrever_ocd_v10
         from .ocad.geo import declinacao_noaa
         from .ocad.projeto import centro_latlon
 
@@ -112,10 +123,23 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         curvas = self.parameterAsVectorLayer(parameters, self.CURVAS, context)
         decl_auto = self.parameterAsBool(parameters, self.DECL_AUTO, context)
         decl_manual = self.parameterAsDouble(parameters, self.DECL_MANUAL, context)
+        formato = self.parameterAsEnum(parameters, self.FORMATO, context)
+        fazer_ocad = formato in (0, 2)
+        fazer_omap = formato in (1, 2)
         pasta = self.parameterAsString(parameters, self.PASTA, context)
 
         if not pasta:
-            raise QgsProcessingException('Selecione uma pasta de saída.')
+            raise QgsProcessingException(
+                'Selecione uma pasta de saída no seu computador.')
+        # A pasta precisa ser permanente: o satélite (.tif) fica junto dos
+        # projetos, então um diretório temporário (apagado depois) não serve.
+        pasta_abs = os.path.normcase(os.path.abspath(pasta))
+        for td in (tempfile.gettempdir(), QgsProcessingUtils.tempFolder()):
+            if td and pasta_abs.startswith(os.path.normcase(os.path.abspath(td))):
+                raise QgsProcessingException(
+                    'A pasta de saída não pode ser um diretório temporário. '
+                    'Escolha uma pasta permanente no seu computador — o '
+                    'satélite (.tif) precisa ficar junto dos projetos.')
         os.makedirs(pasta, exist_ok=True)
 
         crs = folha.sourceCrs()
@@ -165,16 +189,21 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         feedback.pushInfo(f'Convergência meridiana: {proj.convergencia:.2f}° | '
                           f'grivação (norte magnético): {proj.grivacao:.2f}°.')
 
-        omap = os.path.join(pasta, 'projeto_oriifsc.omap')
-        ocd = os.path.join(pasta, 'projeto_oriifsc.ocd')
-        feedback.pushInfo('Gerando projeto OpenOrienteering Mapper (.omap)...')
-        escrever_omap(proj, omap)
-        feedback.pushInfo('Gerando projeto OCAD 9 (.ocd)...')
-        escrever_ocd_v9(proj, ocd)
+        resultado = {}
+        if fazer_ocad:
+            ocd = os.path.join(pasta, 'projeto_orifsc.ocd')
+            feedback.pushInfo('Gerando projeto OCAD 10 (.ocd)...')
+            escrever_ocd_v10(proj, ocd)
+            resultado['OCD'] = ocd
+        if fazer_omap:
+            omap = os.path.join(pasta, 'projeto_orifsc.omap')
+            feedback.pushInfo('Gerando projeto OpenOrienteering Mapper (.omap)...')
+            escrever_omap(proj, omap)
+            resultado['OMAP'] = omap
         feedback.setProgress(100)
 
         feedback.pushInfo(f'Projetos gerados em: {pasta}')
-        return {'OMAP': omap, 'OCD': ocd}
+        return resultado
 
     # ------------------------------------------------------------------ apoio
     def _epsg_utm(self, crs):
@@ -237,7 +266,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         img, bounds3857 = self._baixar_mosaico(rect, zoom, feedback)
 
         # 4. Georreferencia em 3857 e reprojeta para o CRS da folha (alinha às curvas).
-        caminho = os.path.join(pasta, 'satelite_oriifsc.tif')
+        caminho = os.path.join(pasta, 'satelite_orifsc.tif')
         self._georref_e_reprojeta(img, bounds3857, crs, caminho)
         return caminho
 
@@ -266,7 +295,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         ty0, ty1 = int(py_min // TILE), int((py_max - 1e-6) // TILE)
         nx, ny = tx1 - tx0 + 1, ty1 - ty0 + 1
 
-        mosaico = QImage(nx * TILE, ny * TILE, QImage.Format_RGB888)
+        mosaico = QImage(nx * TILE, ny * TILE, QImage.Format.Format_RGB888)
         mosaico.fill(0)
         pintor = QPainter(mosaico)
         tiles = [(tx, ty) for ty in range(ty0, ty1 + 1) for tx in range(tx0, tx1 + 1)]
@@ -328,11 +357,21 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             ulx, uly, lrx, lry = bounds3857
             gdal.Translate(tmp_3857, tmp_png, outputSRS='EPSG:3857',
                            outputBounds=[ulx, uly, lrx, lry])
-            # dstAlpha: os cantos vazios da reprojeção (faixa preta) viram
-            # transparentes. Lanczos reamostra com mais nitidez que cúbica.
+            # 3 bandas RGB, SEM canal alpha: o OCAD não lê o 4º canal (alpha)
+            # corretamente — abre como falsa-cor/infravermelho (OCAD 2020) ou
+            # nem abre (OCAD 10). Por isso NÃO usar dstAlpha. Os cantos vazios
+            # da reprojeção são preenchidos de branco (INIT_DEST=255) em vez de
+            # transparentes. PHOTOMETRIC=RGB deixa a interpretação explícita.
+            # Lanczos reamostra com mais nitidez que cúbica.
+            # OCAD 10 só importa TIFF *stripped* e sem DEFLATE/JPEG; por isso
+            # TILED=NO e COMPRESS=LZW (LZW é lido pelo OCAD e mantém o arquivo
+            # pequeno). NÃO usar TILED=YES (erro "contains tiles") nem
+            # COMPRESS=DEFLATE/JPEG (erro "tipo de compressão não suportada").
             gdal.Warp(destino_tif, tmp_3857, dstSRS=crs.authid(),
-                      resampleAlg='lanczos', multithread=True, dstAlpha=True,
-                      creationOptions=['COMPRESS=DEFLATE', 'TILED=YES'])
+                      resampleAlg='lanczos', multithread=True,
+                      warpOptions=['INIT_DEST=255'],
+                      creationOptions=['COMPRESS=LZW', 'TILED=NO',
+                                       'BIGTIFF=NO', 'PHOTOMETRIC=RGB'])
         finally:
             for f in (tmp_png, tmp_3857):
                 try:

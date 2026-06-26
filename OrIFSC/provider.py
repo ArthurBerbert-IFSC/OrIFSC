@@ -22,7 +22,7 @@ class OrIFSCProvider(QgsProcessingProvider):
         self.addAlgorithm(ExportarOCAD())
 
     def id(self):
-        return 'oriifsc'
+        return 'orifsc'
 
     def name(self):
         return 'OrIFSC'

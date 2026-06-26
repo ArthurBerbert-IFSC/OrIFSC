@@ -104,9 +104,10 @@ class DialogConfiguracoes(QDialog):
         pasta_box.addWidget(btn_pasta)
         form.addRow('Pasta de saída padrão:', pasta_box)
 
-        botoes = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        botoes.button(QDialogButtonBox.Ok).setText('Salvar')
-        botoes.button(QDialogButtonBox.Cancel).setText('Cancelar')
+        botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
+                                  QDialogButtonBox.StandardButton.Cancel)
+        botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Salvar')
+        botoes.button(QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
         botoes.accepted.connect(self._salvar)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)

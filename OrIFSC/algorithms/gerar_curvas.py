@@ -79,7 +79,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             self.RECORTE, 'Recortar curvas por (camada — opcional: folha ou limite)',
             [QgsProcessing.TypeVectorPolygon], optional=True))
         self.addParameter(QgsProcessingParameterVectorDestination(
-            self.OUTPUT_CURVAS, 'Salvar Curvas como'))
+            self.OUTPUT_CURVAS, 'Curvas de Nível (Copernicus)', type=QgsProcessing.TypeVectorLine))
 
     def processAlgorithm(self, parameters, context, feedback):
         camada_limite = self.parameterAsSource(parameters, self.LIMITE, context)
@@ -101,7 +101,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         for i, (lat_fl, lon_fl) in enumerate(tiles):
             feedback.setProgress(int(i * 40 / len(tiles)))
             url = self._copernicus_url(lat_fl, lon_fl)
-            tmp = os.path.join(tempfile.gettempdir(), f'oriifsc_cop30_{lat_fl}_{lon_fl}.tif')
+            tmp = os.path.join(tempfile.gettempdir(), f'orifsc_cop30_{lat_fl}_{lon_fl}.tif')
             if not os.path.exists(tmp):
                 feedback.pushInfo(f'Baixando tile Copernicus ({lat_fl}, {lon_fl})...')
                 try:
@@ -114,7 +114,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
 
         if len(tile_files) > 1:
             feedback.pushInfo('Mesclando tiles...')
-            mdt_temp = os.path.join(tempfile.gettempdir(), 'oriifsc_mdt_merged.tif')
+            mdt_temp = os.path.join(tempfile.gettempdir(), 'orifsc_mdt_merged.tif')
             processing.run('gdal:merge', {
                 'INPUT': tile_files,
                 'PCT': False, 'SEPARATE': False,

@@ -1,9 +1,11 @@
 [general]
 name=OrIFSC
 qgisMinimumVersion=3.16
+qgisMaximumVersion=4.99
+supportsQt6=True
 description=Generate cartographic base maps for the sport of orienteering
 description[pt]=Gerador de bases cartográficas para mapas de orientação esportiva
-version=0.1.6
+version=0.1.7.1
 author= arthur berbert
 email=arthur@berbert.eng.br
 about=OrIFSC automates the production of cartographic base maps for the sport of orienteering. It is a partnership between IFSC (Instituto Federal de Santa Catarina), the Santa Catarina Orienteering Federation (FCO) and the Florianópolis Orienteering Club (FLORA). The plugin loads a georeferenced satellite image, generates smoothed contour lines from free elevation data (Copernicus 30 m DEM) and exports a ready-to-open project for OCAD and OpenOrienteering Mapper, already set up with georeferencing, magnetic declination, the satellite backdrop and the contour lines as map objects.
@@ -17,3 +19,12 @@ category=Vector
 icon=icons/icon.svg
 experimental=False
 deprecated=False
+changelog=
+    0.1.7
+    - Correção: o GeoTIFF do satélite voltou a sair com 3 bandas RGB (sem canal alpha). O alpha gerava um TIFF de 4 bandas que o OCAD lia como falsa-cor/infravermelho (OCAD 2020) ou nem abria (OCAD 10); os cantos vazios da rotação agora ficam brancos.
+    - Exportação OCAD: o .ocd passa a ser gravado no formato OCD v10 (antes v9), abrindo direto no OCAD 10+ sem o pedido de conversão. A pasta de saída agora é obrigatória e não pode ser um diretório temporário (o satélite .tif precisa ficar junto dos projetos).
+    - Exportação: novo seletor "Formato(s) a gerar" (OCAD .ocd / OpenOrienteering Mapper .omap / ambos), com "OCAD (.ocd)" como padrão — antes os dois arquivos eram sempre gerados. O campo de declinação manual agora deixa claro que só é usado se o automático estiver desmarcado ou falhar.
+    - Compatibilidade com QGIS 4 (Qt6/PyQt6): enums de classes Qt agora usam a forma escopada (QImage.Format.Format_RGB888, Qt.PenStyle.DashLine, Qt.BrushStyle.NoBrush, QDialogButtonBox.StandardButton.*, QXmlStreamReader.TokenType.*) e os diálogos usam exec() em vez de exec_(). As mudanças continuam funcionando no QGIS 3.16+ (PyQt5). metadata: supportsQt6=True e qgisMaximumVersion=4.99.
+    0.1.6.2
+    - Correção: o GeoTIFF do satélite agora é gerado em formato compatível com o OCAD 10 (stripped + LZW, sem tiles nem DEFLATE/JPEG). Antes o OCAD 10 recusava o arquivo com "contains tiles" / "tipo de compressão não suportada".
+    - Renomeia saídas e id do provider de "oriifsc" (grafia errada) para "orifsc": agora gera projeto_orifsc.ocd/.omap e satelite_orifsc.tif; algoritmos passam a ser orifsc:exportar_ocad e orifsc:gerar_curvas_nivel.

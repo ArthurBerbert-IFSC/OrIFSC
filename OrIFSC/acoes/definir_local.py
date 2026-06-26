@@ -74,9 +74,10 @@ class DialogDefinirLocal(QDialog):
         self.preview_label.setStyleSheet('color: #555; font-style: italic;')
         form.addRow('Área no terreno:', self.preview_label)
 
-        botoes = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        botoes.button(QDialogButtonBox.Ok).setText('Criar Folha')
-        botoes.button(QDialogButtonBox.Cancel).setText('Cancelar')
+        botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
+                                  QDialogButtonBox.StandardButton.Cancel)
+        botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Criar Folha')
+        botoes.button(QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
         botoes.accepted.connect(self._definir)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)

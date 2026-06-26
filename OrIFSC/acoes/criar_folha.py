@@ -31,7 +31,7 @@ def criar_folha(iface, parent=None):
     simbolo = QgsSymbol.defaultSymbol(folha.geometryType())
     simbolo.symbolLayer(0).setStrokeColor(QColor(255, 0, 255))
     simbolo.symbolLayer(0).setStrokeWidth(1.2)
-    simbolo.symbolLayer(0).setBrushStyle(Qt.NoBrush)
+    simbolo.symbolLayer(0).setBrushStyle(Qt.BrushStyle.NoBrush)
     folha.setRenderer(QgsSingleSymbolRenderer(simbolo))
 
     QgsProject.instance().addMapLayer(folha)  # vai para o topo

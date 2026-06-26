@@ -3,7 +3,7 @@
 Dois formatos, escritos do zero (sem depender de OCAD/OOM instalados):
 
 - **.omap** — OpenOrienteering Mapper (XML aberto). Caminho robusto e verificável.
-- **.ocd** — OCAD 9 (binário). Abre direto no OCAD, sem passar pelo OOM.
+- **.ocd** — OCAD 10 (binário). Abre direto no OCAD, sem passar pelo OOM.
 
 Ambos saem com a mesma geometria: georreferência (UTM + escala + grade),
 declinação magnética, a imagem de satélite como mapa de fundo georreferenciado e
@@ -15,6 +15,6 @@ OpenOrienteering Mapper (GPLv3): `src/fileformats/ocd_types*.h`,
 """
 from .projeto import ProjetoOcad
 from .omap import escrever_omap
-from .ocd import escrever_ocd_v9
+from .ocd import escrever_ocd_v10
 
-__all__ = ['ProjetoOcad', 'escrever_omap', 'escrever_ocd_v9']
+__all__ = ['ProjetoOcad', 'escrever_omap', 'escrever_ocd_v10']

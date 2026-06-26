@@ -64,9 +64,10 @@ class DialogImportarKmlGpx(QDialog):
         layout.addWidget(self.grupo_gpx)
 
         # --- Botões ---
-        botoes = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        botoes.button(QDialogButtonBox.Ok).setText('Importar')
-        botoes.button(QDialogButtonBox.Cancel).setText('Cancelar')
+        botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
+                                  QDialogButtonBox.StandardButton.Cancel)
+        botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Importar')
+        botoes.button(QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
         botoes.accepted.connect(self._importar)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)

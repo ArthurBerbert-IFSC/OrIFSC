@@ -18,7 +18,7 @@ def _icone(nome):
 class OrIFSCPlugin:
     def __init__(self, iface):
         self.iface = iface
-        self.menu_oriifsc = None
+        self.menu_orifsc = None
         self.actions = []
         self.provider = None
 
@@ -30,7 +30,7 @@ class OrIFSCPlugin:
         QgsApplication.processingRegistry().addProvider(self.provider)
 
         menu_bar = self.iface.mainWindow().menuBar()
-        self.menu_oriifsc = QMenu('OrIFSC', self.iface.mainWindow())
+        self.menu_orifsc = QMenu('OrIFSC', self.iface.mainWindow())
 
         # Insere antes do menu Ajuda
         ajuda = None
@@ -40,11 +40,11 @@ class OrIFSCPlugin:
                 ajuda = action
                 break
         if ajuda:
-            menu_bar.insertMenu(ajuda, self.menu_oriifsc)
+            menu_bar.insertMenu(ajuda, self.menu_orifsc)
         else:
-            menu_bar.addMenu(self.menu_oriifsc)
+            menu_bar.addMenu(self.menu_orifsc)
 
-        self._construir_menu(self.menu_oriifsc, self._definicao_menu())
+        self._construir_menu(self.menu_orifsc, self._definicao_menu())
 
     def _definicao_menu(self):
         """Estrutura declarativa do menu. Para adicionar uma função, basta
@@ -110,10 +110,10 @@ class OrIFSCPlugin:
                 self.actions.append(act)
 
     def unload(self):
-        if self.menu_oriifsc:
+        if self.menu_orifsc:
             # Deletar o QMenu raiz remove submenus e ações filhas.
-            self.menu_oriifsc.deleteLater()
-            self.menu_oriifsc = None
+            self.menu_orifsc.deleteLater()
+            self.menu_orifsc = None
         self.actions.clear()
         if self.provider:
             try:
@@ -126,7 +126,7 @@ class OrIFSCPlugin:
     def _definir_local(self):
         from .acoes.definir_local import DialogDefinirLocal
         dlg = DialogDefinirLocal(self.iface, self.iface.mainWindow())
-        dlg.exec_()
+        dlg.exec()
 
     def _criar_limite(self):
         from .acoes.criar_limite import criar_limite
@@ -147,11 +147,11 @@ class OrIFSCPlugin:
     def _importar_kml_gpx(self):
         from .acoes.importar_kml_gpx import DialogImportarKmlGpx
         dlg = DialogImportarKmlGpx(self.iface, self.iface.mainWindow())
-        dlg.exec_()
+        dlg.exec()
 
     def _gerar_curvas(self):
         import processing
-        processing.execAlgorithmDialog('oriifsc:gerar_curvas_nivel', {})
+        processing.execAlgorithmDialog('orifsc:gerar_curvas_nivel', {})
 
     def _sigsc_ortofoto(self):
         from .acoes.dados_publicos_sc import adicionar_wms
@@ -167,12 +167,12 @@ class OrIFSCPlugin:
 
     def _exportar_ocad(self):
         import processing
-        processing.execAlgorithmDialog('oriifsc:exportar_ocad', {})
+        processing.execAlgorithmDialog('orifsc:exportar_ocad', {})
 
     def _configuracoes(self):
         from .acoes.configuracoes import DialogConfiguracoes
         dlg = DialogConfiguracoes(self.iface.mainWindow())
-        dlg.exec_()
+        dlg.exec()
 
     def _documentacao(self):
         from .acoes.ajuda import abrir_documentacao

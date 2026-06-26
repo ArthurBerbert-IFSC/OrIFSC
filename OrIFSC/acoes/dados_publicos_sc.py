@@ -42,7 +42,7 @@ def _parsear_capabilities(dados):
     layers = []    # records [name, title] dos <Layer> abertos (mais interno por último)
     while not reader.atEnd():
         tok = reader.readNext()
-        if tok == QXmlStreamReader.StartElement:
+        if tok == QXmlStreamReader.TokenType.StartElement:
             tag = str(reader.name())
             if tag in ('Name', 'Title') and tags and tags[-1] == 'Layer' and layers:
                 texto = reader.readElementText().strip()  # consome até o </tag>
@@ -56,7 +56,7 @@ def _parsear_capabilities(dados):
                 rec = [None, None]
                 caps.append(rec)
                 layers.append(rec)
-        elif tok == QXmlStreamReader.EndElement:
+        elif tok == QXmlStreamReader.TokenType.EndElement:
             tag = str(reader.name())
             if tags:
                 tags.pop()

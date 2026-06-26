@@ -26,8 +26,8 @@ def criar_limite(iface, parent=None):
     camada = simbolo.symbolLayer(0)
     camada.setStrokeColor(QColor(255, 0, 0))
     camada.setStrokeWidth(0.6)
-    camada.setStrokeStyle(Qt.DashLine)
-    camada.setBrushStyle(Qt.NoBrush)
+    camada.setStrokeStyle(Qt.PenStyle.DashLine)
+    camada.setBrushStyle(Qt.BrushStyle.NoBrush)
     limite.setRenderer(QgsSingleSymbolRenderer(simbolo))
 
     QgsProject.instance().addMapLayer(limite)
