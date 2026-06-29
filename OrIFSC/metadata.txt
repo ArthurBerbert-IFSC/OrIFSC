@@ -5,7 +5,7 @@ qgisMaximumVersion=4.99
 supportsQt6=True
 description=Generate cartographic base maps for the sport of orienteering
 description[pt]=Gerador de bases cartográficas para mapas de orientação esportiva
-version=0.1.7.1
+version=0.1.7.3
 author= arthur berbert
 email=arthur@berbert.eng.br
 about=OrIFSC automates the production of cartographic base maps for the sport of orienteering. It is a partnership between IFSC (Instituto Federal de Santa Catarina), the Santa Catarina Orienteering Federation (FCO) and the Florianópolis Orienteering Club (FLORA). The plugin loads a georeferenced satellite image, generates smoothed contour lines from free elevation data (Copernicus 30 m DEM) and exports a ready-to-open project for OCAD and OpenOrienteering Mapper, already set up with georeferencing, magnetic declination, the satellite backdrop and the contour lines as map objects.
@@ -20,6 +20,11 @@ icon=icons/icon.svg
 experimental=False
 deprecated=False
 changelog=
+    0.1.7.3
+    - Qualidade: código de reload de módulos movido para trás de variável de ambiente ORIFSC_DEV — não roda mais em produção, evitando comportamento imprevisível com referências a classes recarregadas.
+    - Qualidade: função _ocultar_da_toolbox centralizada em algorithms/utils.py, eliminando duplicação entre gerar_curvas.py e exportar_ocad.py.
+    - Correção: cache de tiles Copernicus agora valida o tamanho mínimo do arquivo (1 KB); arquivos corrompidos ou incompletos de downloads anteriores são detectados e re-baixados automaticamente.
+    - Correção: validação de intervalo das coordenadas no diálogo "Definir Local" — latitude fora de [-90, 90] ou longitude fora de [-180, 180] exibe mensagem clara em vez de gerar um CRS inválido silenciosamente.
     0.1.7
     - Correção: o satélite exportado não é mais carregado automaticamente no QGIS (evita o QGIS travar/ficar preso na memória ao fechar com imagens grandes); o .tif fica salvo na pasta de saída para abrir manualmente e é usado pelo OCAD. Os datasets GDAL da geração são fechados explicitamente (sem handle preso no arquivo).
     - Correção: download das tiles do satélite passa a ser assíncrono numa thread só (via QgsNetworkAccessManager), em vez de um pool de threads. As threads do pool criavam gerenciadores de rede do QGIS que ficavam órfãos e travavam o QGIS ao fechar. O GeoTIFF do satélite segue em LZW (necessário: sem compressão o arquivo passa de ~290 MB e o OCAD 10 falha ao ler).

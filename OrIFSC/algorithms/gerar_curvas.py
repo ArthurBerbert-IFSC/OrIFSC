@@ -11,6 +11,11 @@ import processing
 from qgis.PyQt.QtGui import QIcon
 
 from ..rede import baixar_bytes
+from .utils import ocultar_da_toolbox
+
+# Tamanho mínimo aceitável para um tile Copernicus válido (1 KB).
+# Arquivos menores indicam download corrompido ou incompleto.
+_TILE_MIN_BYTES = 1024
 
 
 def _equidistancia_padrao():
@@ -20,17 +25,6 @@ def _equidistancia_padrao():
         return int(QgsSettings().value('OrIFSC/equidistancia_padrao', 5))
     except Exception:
         return 5
-
-
-def _ocultar_da_toolbox(alg):
-    """Marca o algoritmo como oculto da Caixa de Ferramentas (só acessível pelo menu).
-    Compatível com QGIS antigo (FlagHideFromToolbox) e novo (Qgis.ProcessingAlgorithmFlag)."""
-    flags = super(type(alg), alg).flags()
-    try:
-        return flags | QgsProcessingAlgorithm.FlagHideFromToolbox
-    except AttributeError:
-        from qgis.core import Qgis
-        return flags | Qgis.ProcessingAlgorithmFlag.HideFromToolbox
 
 
 class GerarCurvasNivel(QgsProcessingAlgorithm):
@@ -46,7 +40,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         return GerarCurvasNivel()
 
     def flags(self):
-        return _ocultar_da_toolbox(self)
+        return ocultar_da_toolbox(self)
 
     def icon(self):
         return QIcon(os.path.join(os.path.dirname(__file__), '..', 'icons', 'curvas.svg'))
@@ -98,18 +92,34 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         )
 
         tile_files = []
-        for i, (lat_fl, lon_fl) in enumerate(tiles):
+        for i, (lat_fl, lon_fl) in enumerate(sorted(tiles)):
             feedback.setProgress(int(i * 40 / len(tiles)))
             url = self._copernicus_url(lat_fl, lon_fl)
             tmp = os.path.join(tempfile.gettempdir(), f'orifsc_cop30_{lat_fl}_{lon_fl}.tif')
-            if not os.path.exists(tmp):
+            if self._cache_valido(tmp):
+                feedback.pushInfo(f'Usando tile em cache ({lat_fl}, {lon_fl}).')
+            else:
+                if os.path.exists(tmp):
+                    feedback.pushWarning(
+                        f'Tile em cache inválido ou corrompido ({lat_fl}, {lon_fl}); baixando novamente.')
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
                 feedback.pushInfo(f'Baixando tile Copernicus ({lat_fl}, {lon_fl})...')
                 try:
+                    dados = baixar_bytes(url)
                     with open(tmp, 'wb') as f:
-                        f.write(baixar_bytes(url))
+                        f.write(dados)
                 except Exception as e:
+                    # Remove arquivo parcial para não ser reusado como cache válido.
+                    if os.path.exists(tmp):
+                        try:
+                            os.remove(tmp)
+                        except OSError:
+                            pass
                     raise QgsProcessingException(
-                        f'Falha ao baixar o MDT copernicus. Verifique sua conexão com a internet.\nErro: {e}')
+                        f'Falha ao baixar o MDT Copernicus. Verifique sua conexão com a internet.\nErro: {e}')
             tile_files.append(tmp)
 
         if len(tile_files) > 1:
@@ -171,6 +181,14 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
 
         feedback.setProgress(100)
         return {self.OUTPUT_CURVAS: saida_curvas}
+
+    @staticmethod
+    def _cache_valido(caminho):
+        """Retorna True se o arquivo existe e tem tamanho mínimo aceitável."""
+        try:
+            return os.path.exists(caminho) and os.path.getsize(caminho) >= _TILE_MIN_BYTES
+        except OSError:
+            return False
 
     def _tiles_necessarios(self, min_lat, max_lat, min_lon, max_lon):
         tiles = set()

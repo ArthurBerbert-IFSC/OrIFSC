@@ -162,6 +162,13 @@ class DialogDefinirLocal(QDialog):
                                 'Ex: -27.5926, -48.5431')
             return
 
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            QMessageBox.warning(self, 'Coordenada fora do intervalo',
+                                f'Latitude deve estar entre -90 e 90 (recebido: {lat}).\n'
+                                f'Longitude deve estar entre -180 e 180 (recebido: {lon}).\n'
+                                'Verifique o formato: Lat, Lon')
+            return
+
         escala = self._escala_valor()
         larg_mm, alt_mm = self._dimensoes_mm()
 

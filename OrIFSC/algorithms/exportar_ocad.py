@@ -15,6 +15,7 @@ from qgis.core import (
 from qgis.PyQt.QtGui import QImage, QPainter, QIcon
 
 from ..rede import baixar_varios
+from .utils import ocultar_da_toolbox
 
 # --- Web Mercator / tiles do Google -----------------------------------------
 TILE = 256
@@ -28,17 +29,6 @@ UA = 'Mozilla/5.0 (QGIS OrIFSC plugin)'
 def _resolucao(zoom):
     """Metros por pixel (em EPSG:3857) no nível de zoom dado."""
     return (2.0 * ORIGIN_SHIFT) / (TILE * (2 ** zoom))
-
-
-def _ocultar_da_toolbox(alg):
-    """Marca o algoritmo como oculto da Caixa de Ferramentas (só acessível pelo menu).
-    Compatível com QGIS antigo (FlagHideFromToolbox) e novo (Qgis.ProcessingAlgorithmFlag)."""
-    flags = super(type(alg), alg).flags()
-    try:
-        return flags | QgsProcessingAlgorithm.FlagHideFromToolbox
-    except AttributeError:
-        from qgis.core import Qgis
-        return flags | Qgis.ProcessingAlgorithmFlag.HideFromToolbox
 
 
 class ExportarOCAD(QgsProcessingAlgorithm):
@@ -58,7 +48,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         return ExportarOCAD()
 
     def flags(self):
-        return _ocultar_da_toolbox(self)
+        return ocultar_da_toolbox(self)
 
     def icon(self):
         return QIcon(os.path.join(os.path.dirname(__file__), '..', 'icons', 'exportar.svg'))
