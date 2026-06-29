@@ -21,6 +21,8 @@ experimental=False
 deprecated=False
 changelog=
     0.1.7
+    - Correção: o satélite exportado não é mais carregado automaticamente no QGIS (evita o QGIS travar/ficar preso na memória ao fechar com imagens grandes); o .tif fica salvo na pasta de saída para abrir manualmente e é usado pelo OCAD. Os datasets GDAL da geração são fechados explicitamente (sem handle preso no arquivo).
+    - Correção: download das tiles do satélite passa a ser assíncrono numa thread só (via QgsNetworkAccessManager), em vez de um pool de threads. As threads do pool criavam gerenciadores de rede do QGIS que ficavam órfãos e travavam o QGIS ao fechar. O GeoTIFF do satélite segue em LZW (necessário: sem compressão o arquivo passa de ~290 MB e o OCAD 10 falha ao ler).
     - Correção: o GeoTIFF do satélite voltou a sair com 3 bandas RGB (sem canal alpha). O alpha gerava um TIFF de 4 bandas que o OCAD lia como falsa-cor/infravermelho (OCAD 2020) ou nem abria (OCAD 10); os cantos vazios da rotação agora ficam brancos.
     - Exportação OCAD: o .ocd passa a ser gravado no formato OCD v10 (antes v9), abrindo direto no OCAD 10+ sem o pedido de conversão. A pasta de saída agora é obrigatória e não pode ser um diretório temporário (o satélite .tif precisa ficar junto dos projetos).
     - Exportação: novo seletor "Formato(s) a gerar" (OCAD .ocd / OpenOrienteering Mapper .omap / ambos), com "OCAD (.ocd)" como padrão — antes os dois arquivos eram sempre gerados. O campo de declinação manual agora deixa claro que só é usado se o automático estiver desmarcado ou falhar.

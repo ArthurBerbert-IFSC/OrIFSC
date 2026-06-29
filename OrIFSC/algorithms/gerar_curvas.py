@@ -79,7 +79,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             self.RECORTE, 'Recortar curvas por (camada — opcional: folha ou limite)',
             [QgsProcessing.TypeVectorPolygon], optional=True))
         self.addParameter(QgsProcessingParameterVectorDestination(
-            self.OUTPUT_CURVAS, 'Curvas de Nível (Copernicus)', type=QgsProcessing.TypeVectorLine))
+            self.OUTPUT_CURVAS, 'Curvas de Nível (copernicus)', type=QgsProcessing.TypeVectorLine))
 
     def processAlgorithm(self, parameters, context, feedback):
         camada_limite = self.parameterAsSource(parameters, self.LIMITE, context)
@@ -109,7 +109,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
                         f.write(baixar_bytes(url))
                 except Exception as e:
                     raise QgsProcessingException(
-                        f'Falha ao baixar o MDT Copernicus. Verifique sua conexão com a internet.\nErro: {e}')
+                        f'Falha ao baixar o MDT copernicus. Verifique sua conexão com a internet.\nErro: {e}')
             tile_files.append(tmp)
 
         if len(tile_files) > 1:

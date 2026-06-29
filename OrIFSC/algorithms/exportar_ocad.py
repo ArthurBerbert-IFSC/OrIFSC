@@ -2,27 +2,26 @@ import datetime
 import math
 import os
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
 
 from qgis.core import (
     QgsProcessingAlgorithm, QgsProcessingParameterFeatureSource,
     QgsProcessingParameterVectorLayer, QgsProcessingParameterEnum,
     QgsProcessingParameterBoolean, QgsProcessingParameterNumber,
     QgsProcessingParameterFolderDestination,
-    QgsProcessingException, QgsProcessing, QgsProject, QgsProcessingContext,
+    QgsProcessingException, QgsProcessing, QgsProject,
     QgsProcessingUtils,
     QgsCoordinateReferenceSystem, QgsCoordinateTransform,
 )
 from qgis.PyQt.QtGui import QImage, QPainter, QIcon
 
-from ..rede import baixar_bytes
+from ..rede import baixar_varios
 
 # --- Web Mercator / tiles do Google -----------------------------------------
 TILE = 256
 ORIGIN_SHIFT = math.pi * 6378137.0          # meia-circunferência em EPSG:3857
 ZOOM_MAX = 20                               # zoom máximo do Google Satellite (lyrs=s)
 MAX_PX = 16384                              # teto por lado do mosaico
-TILE_URL = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
+TILE_URL = 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
 UA = 'Mozilla/5.0 (QGIS OrIFSC plugin)'
 
 
@@ -156,7 +155,9 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             feedback.pushInfo('Montando imagem de satélite...')
             tif = self._exportar_satelite(extent, crs, offset_zoom, pasta, feedback)
             satelite = self._geotransform(tif)
-            self._carregar_no_projeto(tif, 'Satélite (exportado)', context)
+            feedback.pushInfo(
+                f'Satélite salvo em: {tif} (não é carregado no QGIS para não '
+                'travar com imagens grandes; abra-o manualmente se quiser vê-lo).')
         feedback.setProgress(60)
 
         # 2. Curvas de nível -> polilinhas no CRS da folha.
@@ -301,23 +302,29 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         tiles = [(tx, ty) for ty in range(ty0, ty1 + 1) for tx in range(tx0, tx1 + 1)]
         feedback.pushInfo(f'Baixando {len(tiles)} tiles (zoom {zoom})...')
 
+        # URL por tile, alternando os hosts mt0..mt3 do Google (mais conexões
+        # concorrentes num só gerenciador de rede, que limita ~6 por host).
+        url_de = {(tx, ty): TILE_URL.format(s=(tx + ty) % 4, x=tx, y=ty, z=zoom)
+                  for (tx, ty) in tiles}
+
+        # Download assíncrono numa thread só (ver rede.baixar_varios): evita criar
+        # gerenciadores de rede em threads Python, que travavam o QGIS ao fechar.
+        dados_por_url = baixar_varios(
+            url_de.values(), user_agent=UA, max_conc=24,
+            cancelado=feedback.isCanceled,
+            progresso=lambda feito, tot: feedback.setProgress(int(50 * feito / tot)))
+
         falhas = 0
-        with ThreadPoolExecutor(max_workers=16) as pool:
-            for i, (coord, dados) in enumerate(
-                    zip(tiles, pool.map(lambda c: self._baixar_tile(*c, zoom), tiles))):
-                if feedback.isCanceled():
-                    break
-                tx, ty = coord
-                ok = False
-                if dados:
-                    tile = QImage()
-                    if tile.loadFromData(dados):
-                        pintor.drawImage((tx - tx0) * TILE, (ty - ty0) * TILE, tile)
-                        ok = True
-                if not ok:
-                    falhas += 1
-                if i % 25 == 0:
-                    feedback.setProgress(int(50 * i / len(tiles)))
+        for (tx, ty) in tiles:
+            dados = dados_por_url.get(url_de[(tx, ty)])
+            ok = False
+            if dados:
+                tile = QImage()
+                if tile.loadFromData(dados):
+                    pintor.drawImage((tx - tx0) * TILE, (ty - ty0) * TILE, tile)
+                    ok = True
+            if not ok:
+                falhas += 1
         pintor.end()
         if falhas == len(tiles):
             raise QgsProcessingException(
@@ -339,13 +346,6 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                           f'({res:.3f} m/px em 3857).')
         return recorte, bounds
 
-    def _baixar_tile(self, tx, ty, zoom):
-        url = TILE_URL.format(x=tx, y=ty, z=zoom)
-        try:
-            return baixar_bytes(url, user_agent=UA)
-        except Exception:
-            return None
-
     def _georref_e_reprojeta(self, img, bounds3857, crs, destino_tif):
         """Carimba a georreferência 3857 na imagem e reprojeta para o CRS da folha."""
         from osgeo import gdal
@@ -355,32 +355,30 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             raise QgsProcessingException('Não foi possível gerar a imagem temporária.')
         try:
             ulx, uly, lrx, lry = bounds3857
-            gdal.Translate(tmp_3857, tmp_png, outputSRS='EPSG:3857',
-                           outputBounds=[ulx, uly, lrx, lry])
-            # 3 bandas RGB, SEM canal alpha: o OCAD não lê o 4º canal (alpha)
-            # corretamente — abre como falsa-cor/infravermelho (OCAD 2020) ou
-            # nem abre (OCAD 10). Por isso NÃO usar dstAlpha. Os cantos vazios
-            # da reprojeção são preenchidos de branco (INIT_DEST=255) em vez de
-            # transparentes. PHOTOMETRIC=RGB deixa a interpretação explícita.
-            # Lanczos reamostra com mais nitidez que cúbica.
-            # OCAD 10 só importa TIFF *stripped* e sem DEFLATE/JPEG; por isso
-            # TILED=NO e COMPRESS=LZW (LZW é lido pelo OCAD e mantém o arquivo
-            # pequeno). NÃO usar TILED=YES (erro "contains tiles") nem
-            # COMPRESS=DEFLATE/JPEG (erro "tipo de compressão não suportada").
-            gdal.Warp(destino_tif, tmp_3857, dstSRS=crs.authid(),
-                      resampleAlg='lanczos', multithread=True,
-                      warpOptions=['INIT_DEST=255'],
-                      creationOptions=['COMPRESS=LZW', 'TILED=NO',
-                                       'BIGTIFF=NO', 'PHOTOMETRIC=RGB'])
+            ds_3857 = gdal.Translate(tmp_3857, tmp_png, outputSRS='EPSG:3857',
+                                     outputBounds=[ulx, uly, lrx, lry])
+            ds_3857 = None      # fecha o handle antes do Warp ler o arquivo
+            # GeoTIFF do fundo: 3 bandas RGB, SEM canal alpha (o OCAD lê o 4º
+            # canal errado → falsa-cor no OCAD 2020 / nem abre no OCAD 10) e
+            # COMPRESS=LZW. O OCAD lê o arquivo INTEIRO de uma vez (fRead): com
+            # LZW ele fica pequeno no disco (o OCAD lê e descomprime); SEM
+            # compressão o arquivo passa de ~290 MB e o OCAD 10 (32-bit) falha o
+            # fRead ("Não pôde ler de fRead ..."). OCAD só lê TIFF *stripped* e
+            # sem JPEG/DEFLATE → TILED=NO + COMPRESS=LZW. Cantos vazios da rotação
+            # ficam brancos (INIT_DEST=255); PHOTOMETRIC=RGB explícito; lanczos
+            # reamostra com mais nitidez. NÃO usar TILED=YES ("contains tiles")
+            # nem COMPRESS=JPEG/DEFLATE ("compressão não suportada" no OCAD).
+            ds_out = gdal.Warp(destino_tif, tmp_3857, dstSRS=crs.authid(),
+                               resampleAlg='lanczos',
+                               warpOptions=['INIT_DEST=255'],
+                               creationOptions=['COMPRESS=LZW', 'TILED=NO',
+                                                'BIGTIFF=NO', 'PHOTOMETRIC=RGB'])
+            if ds_out is not None:
+                ds_out.FlushCache()
+            ds_out = None       # fecha/libera o GeoTIFF final (sem handle preso)
         finally:
             for f in (tmp_png, tmp_3857):
                 try:
                     os.remove(f)
                 except OSError:
                     pass
-
-    def _carregar_no_projeto(self, caminho, nome, context):
-        """Recarrega o arquivo exportado no projeto ao final (na thread principal)."""
-        proj = context.project() or QgsProject.instance()
-        detalhes = QgsProcessingContext.LayerDetails(nome, proj, nome)
-        context.addLayerToLoadOnCompletion(caminho, detalhes)

@@ -7,7 +7,9 @@ import os
 import configparser
 
 from qgis.core import QgsSettings
-from qgis.PyQt.QtWidgets import QMessageBox
+from qgis.PyQt.QtWidgets import (
+    QDialog, QVBoxLayout, QTextBrowser, QDialogButtonBox,
+)
 from qgis.PyQt.QtCore import QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 
@@ -39,22 +41,47 @@ def _localizado(g, chave):
 
 
 def sobre(parent=None):
+    """Janela "Sobre" — mesmo visual do painel lateral (cabeçalho de marca +
+    rodapé de logos), num QDialog com QTextBrowser em vez de QMessageBox para
+    controlar largura e fundo da paleta."""
     g = _geral()
     versao = g.get('version', '?')
     about = _localizado(g, 'about')
     repo = g.get('repository', '')
     tracker = g.get('tracker', '')
     autor = g.get('author', '')
-    from .painel import logos_html
-    html = (
-        logos_html(altura=44) +
-        f'<h3>OrIFSC {versao}</h3>'
-        f'<p>{about}</p>'
-        f'<p><b>Autoria:</b> {autor}</p>'
-        f"<p><a href='{repo}'>Repositório</a> &nbsp;·&nbsp; "
-        f"<a href='{tracker}'>Reportar problema</a></p>"
+
+    from .painel import painel_html, CORES as C
+    corpo = (
+        f'<p style="color:{C["texto_desc"]}; font-size:12px;">{about}</p>'
+        f'<p style="color:{C["texto2"]}; font-size:12px;">'
+        f'<b style="color:{C["texto"]};">Autoria:</b> {autor}</p>'
+        '<p style="font-size:12px;">'
+        f'<a href="{repo}" style="color:{C["acento"]};">Repositório</a>'
+        '&nbsp;&nbsp;·&nbsp;&nbsp;'
+        f'<a href="{tracker}" style="color:{C["acento"]};">Reportar problema</a>'
+        '</p>'
     )
-    QMessageBox.about(parent, 'Sobre o OrIFSC', html)
+    html = painel_html(f'OrIFSC {versao}', corpo, rotulo='SOBRE')
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle('Sobre o OrIFSC')
+    layout = QVBoxLayout(dlg)
+
+    tb = QTextBrowser()
+    tb.setHtml(html)
+    tb.setOpenExternalLinks(True)
+    tb.setStyleSheet(f'QTextBrowser {{ background: {C["fundo"]}; border: none; }}')
+    tb.setMinimumSize(380, 460)
+    layout.addWidget(tb)
+
+    botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+    botoes.button(QDialogButtonBox.StandardButton.Close).setText('Fechar')
+    botoes.rejected.connect(dlg.reject)
+    botoes.accepted.connect(dlg.accept)
+    layout.addWidget(botoes)
+
+    dlg.exec()
 
 
 def abrir_documentacao():
