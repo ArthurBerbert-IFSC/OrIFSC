@@ -45,7 +45,8 @@ class ProjetoOcad:
         self.zona, self.sul = zona_utm_de_epsg(self.epsg)
         self.proj4 = ('+proj=utm +zone={z}{s} +datum=WGS84 +units=m +no_defs'
                       .format(z=self.zona, s=' +south' if self.sul else ''))
-        self.crs_param = '{z} {h}'.format(z=self.zona, h='S' if self.sul else 'N')
+        self.crs_param = '{z} {h}'.format(
+            z=self.zona, h='S' if self.sul else 'N')
         self.i_grade = codigo_grade_zona(self.epsg)
 
         x0, y0, x1, y1 = folha_rect
@@ -60,7 +61,8 @@ class ProjetoOcad:
         # igual ao OOM. É o ângulo `a` do OCD e o `grivation` do .omap.
         self.grivacao = self.declinacao - self.convergencia
 
-        # Transform mapa(mm)→mundo, idêntico a Georeferencing::updateTransformation.
+        # Transform mapa(mm)→mundo, idêntico a
+        # Georeferencing::updateTransformation.
         t = QTransform()
         t.translate(self.ref_e, self.ref_n)
         t.rotate(-self.grivacao)

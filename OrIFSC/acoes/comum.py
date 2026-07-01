@@ -4,7 +4,7 @@ Os passos são ações independentes do menu, então os parâmetros definidos no
 Passo 2 (EPSG e o retângulo da folha) ficam guardados como propriedades do
 projeto — sobrevivem a salvar/reabrir o .qgz.
 """
-from qgis.core import QgsProject
+from qgis.core import QgsProject, QgsVectorLayer
 from qgis.PyQt.QtWidgets import QMessageBox
 
 ESCOPO = 'OrIFSC'
@@ -56,3 +56,40 @@ def avisar_projeto_nao_configurado(parent=None):
         parent, 'OrIFSC',
         'Rode antes o passo "Definir Local e Criar Folha" para configurar o '
         'projeto (coordenada, escala e folha).')
+
+
+# --------------------------------------------------------------- camadas
+def _geom(nome_novo, nome_legado):
+    """Enum de tipo de geometria compatível com QGIS 3 e 4 (Qt6)."""
+    try:
+        from qgis.core import Qgis
+        return getattr(Qgis.GeometryType, nome_novo)
+    except (ImportError, AttributeError):
+        from qgis.core import QgsWkbTypes
+        return getattr(QgsWkbTypes, nome_legado)
+
+
+def camadas_poligono():
+    """Camadas vetoriais de polígono carregadas no projeto."""
+    g = _geom('Polygon', 'PolygonGeometry')
+    return [c for c in QgsProject.instance().mapLayers().values()
+            if isinstance(c, QgsVectorLayer) and c.geometryType() == g]
+
+
+def camada_curvas():
+    """Camada de linha cujo nome sugere curvas de nível, ou None.
+
+    Heurística simples (nome contém "urva"), usada pelo guia de status do menu e
+    pelo pré-preenchimento da exportação. O usuário sempre pode escolher outra.
+    """
+    g = _geom('Line', 'LineGeometry')
+    for c in QgsProject.instance().mapLayers().values():
+        if (isinstance(c, QgsVectorLayer) and c.geometryType() == g
+                and 'urva' in c.name().lower()):
+            return c
+    return None
+
+
+def tem_camada_curvas():
+    """True se há uma camada que parece ser de curvas de nível."""
+    return camada_curvas() is not None

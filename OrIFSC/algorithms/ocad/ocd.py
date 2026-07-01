@@ -21,12 +21,15 @@ FATOR_SIMBOLO = 1000                 # BaseSymbolV9::symbol_number_factor
 _STR_ENTRY = 16                      # ParameterStringIndexEntry
 _SYM_ENTRY = 4                       # SymbolIndexEntry
 _OBJ_ENTRY = 40                      # ObjectIndexEntryV9
-_OBJ_POS_OFFSET = 16                 # ObjectIndexEntryV9: campo `pos` (após 2 OcdPoint32)
+# ObjectIndexEntryV9: campo `pos` (após 2 OcdPoint32)
+_OBJ_POS_OFFSET = 16
 
 # Conferência das structs portadas (packed).
 assert struct.calcsize('<HBBH BB' + 'I' * 10) == 48          # FileHeaderV9
-assert struct.calcsize('<iBBhIHBBIHHIIII') == 40             # ObjectV9 (header)
-assert struct.calcsize('<iiiiIIiBBBBHHHBB') == _OBJ_ENTRY    # ObjectIndexEntryV9
+# ObjectV9 (header)
+assert struct.calcsize('<iBBhIHBBIHHIIII') == 40
+# ObjectIndexEntryV9
+assert struct.calcsize('<iiiiIIiBBBBHHHBB') == _OBJ_ENTRY
 
 
 def _round_half_up(v):
@@ -54,15 +57,19 @@ def _enc(texto):
 class _OcdWriter:
     def __init__(self):
         self.ba = bytearray()
-        self.ba += struct.pack('<HBBHBB', VENDOR, 0, 0, VERSION, 0, 0)  # 8 bytes
+        self.ba += struct.pack('<HBBHBB', VENDOR, 0, 0,
+                               VERSION, 0, 0)  # 8 bytes
         self.ba += struct.pack('<10I', *([0] * 10))                    # -> 48
         # V9 não tem bloco de setup binário (só o V8 tem).
         _pad8(self.ba)
-        self.first_string = len(self.ba); self.ba += _bloco(_STR_ENTRY)
+        self.first_string = len(self.ba)
+        self.ba += _bloco(_STR_ENTRY)
         _pad8(self.ba)
-        self.first_symbol = len(self.ba); self.ba += _bloco(_SYM_ENTRY)
+        self.first_symbol = len(self.ba)
+        self.ba += _bloco(_SYM_ENTRY)
         _pad8(self.ba)
-        self.first_object = len(self.ba); self.ba += _bloco(_OBJ_ENTRY)
+        self.first_object = len(self.ba)
+        self.ba += _bloco(_OBJ_ENTRY)
         struct.pack_into('<I', self.ba, 8, self.first_symbol)
         struct.pack_into('<I', self.ba, 12, self.first_object)
         struct.pack_into('<I', self.ba, 32, self.first_string)
@@ -106,7 +113,12 @@ class _OcdWriter:
                             blx, bly, trx, try_,
                             0, len(dados), simbolo,
                             tipo, 0, 1, 0, cor, 0, 0, 0, 0)
-        self._insert(self.first_object, _OBJ_ENTRY, _OBJ_POS_OFFSET, entry, dados)
+        self._insert(
+            self.first_object,
+            _OBJ_ENTRY,
+            _OBJ_POS_OFFSET,
+            entry,
+            dados)
 
 
 def _simbolo_linha_bytes(proj):
@@ -123,8 +135,11 @@ def _simbolo_linha_bytes(proj):
     base[57:57 + len(desc)] = desc                       # PascalString<31>
     # icon (484 bytes) fica zerado em [88..572]
     common = bytearray(76)
-    largura = _round_half_up(proj.largura_um / 10.0)     # 1/1000 mm -> 1/100 mm
-    struct.pack_into('<HHH', common, 0, 0, largura, 1)   # line_color, line_width, style
+    largura = _round_half_up(
+        proj.largura_um /
+        10.0)     # 1/1000 mm -> 1/100 mm
+    # line_color, line_width, style
+    struct.pack_into('<HHH', common, 0, 0, largura, 1)
     return bytes(base) + bytes(common)
 
 
@@ -137,7 +152,8 @@ def _objeto_bytes(proj, linha):
         x = _round_half_up(mx * 100.0) << 8              # 1/100 mm, flags=0
         y = _round_half_up(-my * 100.0) << 8             # y para cima
         coords += struct.pack('<ii', x, y)
-        xs.append(x); ys.append(y)
+        xs.append(x)
+        ys.append(y)
     cabec = struct.pack('<iBBhIHBBIHHIIII',
                         numero, 2, 0, 0, len(linha), 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0)

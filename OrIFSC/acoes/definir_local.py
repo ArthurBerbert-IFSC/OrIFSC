@@ -67,7 +67,8 @@ class DialogDefinirLocal(QDialog):
 
         self.orientacao_combo = QComboBox()
         self.orientacao_combo.addItems(['Paisagem', 'Retrato'])
-        self.orientacao_combo.currentIndexChanged.connect(self._atualizar_preview)
+        self.orientacao_combo.currentIndexChanged.connect(
+            self._atualizar_preview)
         form.addRow('Orientação:', self.orientacao_combo)
 
         self.preview_label = QLabel()
@@ -76,8 +77,10 @@ class DialogDefinirLocal(QDialog):
 
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                   QDialogButtonBox.StandardButton.Cancel)
-        botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Criar Folha')
-        botoes.button(QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
+        botoes.button(
+            QDialogButtonBox.StandardButton.Ok).setText('Criar Folha')
+        botoes.button(
+            QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
         botoes.accepted.connect(self._definir)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
@@ -102,7 +105,8 @@ class DialogDefinirLocal(QDialog):
                 self.escala_combo.setCurrentIndex(i)
                 break
         else:
-            self.escala_combo.setCurrentIndex(len(ESCALAS) - 1)  # Personalizada...
+            # Personalizada...
+            self.escala_combo.setCurrentIndex(len(ESCALAS) - 1)
             self.escala_custom.setValue(padrao)
         nomes = [nome for nome, _, _ in FOLHAS]
         folha = ler_folha_padrao()

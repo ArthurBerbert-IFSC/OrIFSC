@@ -7,12 +7,12 @@ centralizando o mapa na extensão das camadas carregadas.
 import os
 
 from qgis.core import (
-    QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+    QgsCoordinateTransform,
     QgsProject, QgsRectangle, QgsVectorLayer,
 )
 from qgis.PyQt.QtWidgets import (
     QDialog, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
+    QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
     QCheckBox, QDialogButtonBox,
 )
 
@@ -20,9 +20,9 @@ from .painel import montar_com_painel, INSTRUCOES
 
 # Sub-camadas disponíveis no formato GPX (nome interno OGR → rótulo amigável)
 _SUBCAMADAS_GPX = [
-    ('tracks',       'Trilhas (tracks)'),
-    ('routes',       'Rotas (routes)'),
-    ('waypoints',    'Waypoints'),
+    ('tracks', 'Trilhas (tracks)'),
+    ('routes', 'Rotas (routes)'),
+    ('waypoints', 'Waypoints'),
 ]
 
 
@@ -40,7 +40,8 @@ class DialogImportarKmlGpx(QDialog):
         # --- Seletor de arquivo ---
         linha_arquivo = QHBoxLayout()
         self.campo_arquivo = QLineEdit()
-        self.campo_arquivo.setPlaceholderText('Selecione um arquivo .kml ou .gpx')
+        self.campo_arquivo.setPlaceholderText(
+            'Selecione um arquivo .kml ou .gpx')
         self.campo_arquivo.textChanged.connect(self._on_arquivo_mudou)
         linha_arquivo.addWidget(self.campo_arquivo, 1)
 
@@ -67,7 +68,8 @@ class DialogImportarKmlGpx(QDialog):
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                   QDialogButtonBox.StandardButton.Cancel)
         botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Importar')
-        botoes.button(QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
+        botoes.button(
+            QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
         botoes.accepted.connect(self._importar)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
@@ -104,7 +106,8 @@ class DialogImportarKmlGpx(QDialog):
         camadas_carregadas = []
 
         if ext_lower == '.gpx':
-            selecionadas = [n for n, cb in self.checks.items() if cb.isChecked()]
+            selecionadas = [
+                n for n, cb in self.checks.items() if cb.isChecked()]
             if not selecionadas:
                 QMessageBox.warning(self, 'Nenhuma sub-camada',
                                     'Marque ao menos uma sub-camada para importar.')
@@ -145,7 +148,7 @@ class DialogImportarKmlGpx(QDialog):
             if crs_camada.authid() != crs_projeto.authid():
                 try:
                     tr = QgsCoordinateTransform(crs_camada, crs_projeto,
-                                               QgsProject.instance())
+                                                QgsProject.instance())
                     ext_camada = tr.transformBoundingBox(ext_camada)
                 except Exception:
                     pass

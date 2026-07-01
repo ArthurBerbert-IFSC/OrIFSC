@@ -107,7 +107,8 @@ class DialogConfiguracoes(QDialog):
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                   QDialogButtonBox.StandardButton.Cancel)
         botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Salvar')
-        botoes.button(QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
+        botoes.button(
+            QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
         botoes.accepted.connect(self._salvar)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
@@ -139,8 +140,11 @@ class DialogConfiguracoes(QDialog):
         s = QgsSettings()
         s.setValue(PREFIXO + 'escala_padrao', int(self.escala_spin.value()))
         s.setValue(PREFIXO + 'folha_padrao', self.folha_combo.currentText())
-        s.setValue(PREFIXO + 'orientacao_padrao', self.orientacao_combo.currentText())
-        s.setValue(PREFIXO + 'equidistancia_padrao', int(self.equi_spin.value()))
+        s.setValue(
+            PREFIXO + 'orientacao_padrao',
+            self.orientacao_combo.currentText())
+        s.setValue(PREFIXO + 'equidistancia_padrao',
+                   int(self.equi_spin.value()))
         s.setValue(PREFIXO + 'fonte_dem', 'copernicus')
         s.setValue(PREFIXO + 'pasta_saida', self.pasta_edit.text())
         self.accept()

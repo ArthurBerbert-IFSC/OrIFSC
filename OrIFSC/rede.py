@@ -1,12 +1,17 @@
-"""Acesso à rede via QGIS (QgsBlockingNetworkRequest).
+"""Acesso à rede: download único pela rede do QGIS e download paralelo de muitos.
 
-Usado por todo o plugin no lugar de ``urllib`` para que o download respeite as
-configurações de rede do usuário (proxy, timeout) e para evitar abrir esquemas
-de URL inesperados (file://, etc.).
+``baixar_bytes`` usa ``QgsBlockingNetworkRequest`` (respeita proxy/timeout do QGIS
+e é seguro na thread de um algoritmo) para baixas avulsas — MDT, declinação, WMS.
+
+``baixar_varios`` baixa muitas URLs em paralelo com um pool de threads + ``urllib``
+(ver a explicação na própria função): é o que baixa as tiles do satélite sem
+travar nem deixar gerenciadores de rede do QGIS órfãos.
+
+Ambos só aceitam esquemas http(s) (evita file:// e afins).
 """
-from qgis.core import QgsBlockingNetworkRequest, QgsNetworkAccessManager
-from qgis.PyQt.QtCore import QUrl, QEventLoop
-from qgis.PyQt.QtNetwork import QNetworkRequest, QNetworkReply
+from qgis.core import QgsBlockingNetworkRequest
+from qgis.PyQt.QtCore import QUrl
+from qgis.PyQt.QtNetwork import QNetworkRequest
 
 
 def baixar_bytes(url, user_agent='OrIFSC'):
@@ -27,76 +32,81 @@ def baixar_bytes(url, user_agent='OrIFSC'):
     return bytes(blocking.reply().content())
 
 
-def baixar_varios(urls, user_agent='OrIFSC', max_conc=24,
-                  cancelado=None, progresso=None):
-    """Baixa várias URLs http(s) concorrentemente NA THREAD ATUAL.
+def baixar_varios(urls, user_agent='OrIFSC', max_conc=12,
+                  cancelado=None, progresso=None, timeout_ms=20000,
+                  tentativas=3, heartbeat=None):
+    """Baixa várias URLs http(s) em paralelo (pool de threads + ``urllib``).
 
-    Usa o ``QgsNetworkAccessManager`` da thread atual de forma assíncrona (vários
-    ``get()`` em voo + um ``QEventLoop`` aninhado), em vez de um pool de threads
-    Python. Cada thread Python que chama a rede do QGIS cria um gerenciador de
-    rede próprio que fica órfão ao fim da thread e trava o QGIS no fechamento;
-    aqui há um só gerenciador (o da thread do algoritmo), limpo pelo QGIS.
+    Por que ``urllib`` e não a rede do QGIS aqui:
+      - criar ``QgsNetworkAccessManager`` em threads Python deixa gerenciadores
+        órfãos que travavam o QGIS ao fechar (bug antigo, do tempo do pool);
+      - a alternativa de NAM único assíncrono (signal ``finished`` + ``QEventLoop``
+        aninhado) NÃO entrega as respostas de forma confiável a partir da thread de
+        um algoritmo de Processing — o download ficava preso em "0/N" e nem o
+        Cancelar respondia (o ``abort`` também depende do ``finished``).
+    Threads Python com ``urllib`` baixam de verdade, em paralelo, sem objetos de
+    rede do QGIS (nada a orfanar) e respeitam o proxy do sistema
+    (variáveis http_proxy / configuração do Windows).
 
-    Retorna ``dict`` ``url -> bytes`` (ou ``None`` em falha). ``cancelado()`` e
-    ``progresso(concluidas, total)`` são callables opcionais.
+    Robustez: ``timeout_ms`` por requisição (conexão travada falha em vez de
+    pendurar) e re-tentativa (``tentativas``) das que falham, para a imagem sair
+    completa mesmo sob throttling do Google. O cancelamento é checado a cada tile
+    concluída e a cada nova tentativa, então responde em no máximo ~1 timeout.
+
+    Retorna ``dict`` ``url -> bytes`` (ou ``None`` se esgotar as tentativas).
+    Callables opcionais: ``cancelado()`` e ``progresso(concluidas, total)``.
+    ``heartbeat`` é aceito por compatibilidade e ignorado (o progresso já flui a
+    cada tile concluída).
     """
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     urls = list(urls)
     total = len(urls)
     resultados = {}
     if total == 0:
         return resultados
 
-    nam = QgsNetworkAccessManager.instance()
-    loop = QEventLoop()
-    pendentes = list(reversed(urls))          # pop() retira do fim
-    em_voo = {}                               # reply -> url
-    estado = {'feitas': 0, 'parar': False}
-    ua = user_agent.encode('ascii', 'ignore') if user_agent else b''
+    timeout_s = max(1.0, timeout_ms / 1000.0)
+    cabec = {'User-Agent': user_agent or 'OrIFSC'}
+    n_tent = max(1, int(tentativas))
 
-    def _concluir(url):
-        estado['feitas'] += 1
-        if progresso:
-            progresso(estado['feitas'], total)
-
-    def _lancar():
-        while pendentes and len(em_voo) < max_conc and not estado['parar']:
-            url = pendentes.pop()
-            if not url.lower().startswith(('http://', 'https://')):
-                resultados[url] = None
-                _concluir(url)
+    def _baixar_uma(url):
+        if not url.lower().startswith(('http://', 'https://')):
+            return None
+        for _ in range(n_tent):
+            if cancelado and cancelado():
+                return None
+            try:
+                req = urllib.request.Request(url, headers=cabec)
+                # Esquema validado no início da função (somente http/https), então
+                # urlopen não abre file:// nem esquemas custom (auditado —
+                # Bandit B310).
+                with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # nosec B310
+                    return resp.read()
+            except Exception:
+                # tenta de novo (throttling/queda)
                 continue
-            req = QNetworkRequest(QUrl(url))
-            if ua:
-                req.setRawHeader(b'User-Agent', ua)
-            reply = nam.get(req)
-            em_voo[reply] = url
+        return None
 
-    def _ao_terminar(reply):
-        url = em_voo.pop(reply, None)
-        if url is None:
-            return                            # resposta de outra requisição
-        if reply.error() == QNetworkReply.NetworkError.NoError:
-            resultados[url] = bytes(reply.readAll())
-        else:
-            resultados[url] = None
-        reply.deleteLater()
-        _concluir(url)
-        if cancelado and cancelado():
-            estado['parar'] = True
-        if estado['parar']:
-            for u in pendentes:
-                resultados.setdefault(u, None)
-            pendentes.clear()
-        if not em_voo and not pendentes:
-            loop.quit()
-        else:
-            _lancar()
-
-    nam.finished.connect(_ao_terminar)
-    try:
-        _lancar()
-        if em_voo:
-            loop.exec()
-    finally:
-        nam.finished.disconnect(_ao_terminar)
+    feitas = 0
+    cancelando = False
+    with ThreadPoolExecutor(max_workers=max(1, int(max_conc))) as executor:
+        futuros = {executor.submit(_baixar_uma, u): u for u in urls}
+        for fut in as_completed(futuros):
+            url = futuros[fut]
+            if fut.cancelled():
+                resultados[url] = None
+            else:
+                try:
+                    resultados[url] = fut.result()
+                except Exception:
+                    resultados[url] = None
+            feitas += 1
+            if progresso:
+                progresso(feitas, total)
+            if not cancelando and cancelado and cancelado():
+                cancelando = True
+                for f in futuros:
+                    f.cancel()                # cancela as que ainda não iniciaram
     return resultados

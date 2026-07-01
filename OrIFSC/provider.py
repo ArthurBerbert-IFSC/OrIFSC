@@ -10,7 +10,8 @@ class OrIFSCProvider(QgsProcessingProvider):
             import sys
             import importlib
             for mod_name in list(sys.modules.keys()):
-                if mod_name.startswith('PluginQgis.algorithms') or mod_name.startswith('OrIFSC.algorithms'):
+                if mod_name.startswith('PluginQgis.algorithms') or mod_name.startswith(
+                        'OrIFSC.algorithms'):
                     try:
                         importlib.reload(sys.modules[mod_name])
                     except Exception:
@@ -31,5 +32,7 @@ class OrIFSCProvider(QgsProcessingProvider):
         return 'OrIFSC — Orientação IFSC'
 
     def icon(self):
-        icon_path = os.path.join(os.path.dirname(__file__), 'icons', 'icon.svg')
-        return QIcon(icon_path) if os.path.exists(icon_path) else super().icon()
+        icon_path = os.path.join(
+            os.path.dirname(__file__), 'icons', 'icon.svg')
+        return QIcon(icon_path) if os.path.exists(
+            icon_path) else super().icon()

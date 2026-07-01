@@ -13,7 +13,10 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtCore import QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 
-_METADATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'metadata.txt')
+_METADATA = os.path.join(
+    os.path.dirname(
+        os.path.dirname(__file__)),
+    'metadata.txt')
 
 
 def _geral():
@@ -71,7 +74,8 @@ def sobre(parent=None):
     tb = QTextBrowser()
     tb.setHtml(html)
     tb.setOpenExternalLinks(True)
-    tb.setStyleSheet(f'QTextBrowser {{ background: {C["fundo"]}; border: none; }}')
+    tb.setStyleSheet(
+        f'QTextBrowser {{ background: {C["fundo"]}; border: none; }}')
     tb.setMinimumSize(380, 460)
     layout.addWidget(tb)
 

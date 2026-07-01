@@ -35,18 +35,18 @@ LOGOS = [
 
 # Paleta do handoff (handoff-painel.md) — fonte única de cor dos componentes.
 CORES = {
-    'acento':      '#f1592a',   # laranja-picota
-    'texto':       '#23262a',   # texto principal
-    'texto2':      '#7c828a',   # texto secundário
-    'texto_desc':  '#3a3e43',   # descrição (bullets)
-    'fundo':       '#f6f4ef',   # fundo do painel
-    'cabec_bg':    '#ffffff',   # cabeçalho de marca
+    'acento': '#f1592a',   # laranja-picota
+    'texto': '#23262a',   # texto principal
+    'texto2': '#7c828a',   # texto secundário
+    'texto_desc': '#3a3e43',   # descrição (bullets)
+    'fundo': '#f6f4ef',   # fundo do painel
+    'cabec_bg': '#ffffff',   # cabeçalho de marca
     'cabec_borda': '#e6e2d8',
-    'card_bg':     '#ffffff',
-    'card_borda':  '#e3dfd6',
-    'dica_bg':     '#fdf2e9',   # caixa de dica (creme)
-    'dica_borda':  '#f6d3b8',
-    'dica_txt':    '#8a5a36',
+    'card_bg': '#ffffff',
+    'card_borda': '#e3dfd6',
+    'dica_bg': '#fdf2e9',   # caixa de dica (creme)
+    'dica_borda': '#f6d3b8',
+    'dica_txt': '#8a5a36',
 }
 C = CORES  # alias curto, usado pelos helpers
 
@@ -68,7 +68,8 @@ def logos_html(altura=60):
     for arquivo, legenda in LOGOS:
         uri = _uri(arquivo)
         if uri:
-            partes.append(f'<img src="{uri}" height="{altura}" alt="{legenda}">')
+            partes.append(
+                f'<img src="{uri}" height="{altura}" alt="{legenda}">')
     if not partes:
         return ''
     return '<p align="center">' + '&nbsp;&nbsp;&nbsp;'.join(partes) + '</p>'
@@ -200,7 +201,8 @@ def painel_html(titulo, instrucoes_html, rotulo='ORIFSC'):
     )
 
 
-def criar_painel(titulo, instrucoes_html, parent=None, largura=320, altura_min=340):
+def criar_painel(titulo, instrucoes_html, parent=None,
+                 largura=320, altura_min=340):
     """QTextBrowser estilizado com o conteúdo do painel, para embutir como
     coluna direita de um QDialog próprio. `altura_min` garante que o diálogo
     cresça o suficiente para o texto de ajuda caber sem rolar."""
@@ -209,7 +211,8 @@ def criar_painel(titulo, instrucoes_html, parent=None, largura=320, altura_min=3
     tb.setOpenExternalLinks(True)
     tb.setFixedWidth(largura)
     tb.setMinimumHeight(altura_min)
-    tb.setStyleSheet(f'QTextBrowser {{ background: {C["fundo"]}; border: none; }}')
+    tb.setStyleSheet(
+        f'QTextBrowser {{ background: {C["fundo"]}; border: none; }}')
     return tb
 
 
@@ -222,7 +225,13 @@ def montar_com_painel(dialog, conteudo_layout, titulo, instrucoes_html,
     dimensionam o painel (e, por consequência, a altura mínima do diálogo)."""
     raiz = QHBoxLayout(dialog)
     raiz.addLayout(conteudo_layout, 1)
-    raiz.addWidget(criar_painel(titulo, instrucoes_html, dialog, largura, altura_min))
+    raiz.addWidget(
+        criar_painel(
+            titulo,
+            instrucoes_html,
+            dialog,
+            largura,
+            altura_min))
 
 
 # ----------------------------------------------------------------- conteúdo
