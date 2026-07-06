@@ -1,6 +1,6 @@
 🗺️ OrIFSC - Plugin QGIS para Mapas de Orientação
 OrIFSC é um plugin para o QGIS que automatiza a produção de bases cartográficas para mapas de orientação desportiva.
-Este projeto é uma parceria entre o Instituto Federal de Santa Catarina (IFSC), a Federação Catarinense de Orientação (FCO) e o Clube de Orientação de Florianópolis (FLORA).
+Este projeto é uma parceria entre o Instituto Federal de Santa Catarina (IFSC) e o Clube de Orientação de Florianópolis (FLORA).
 
 🚀 Novidades (v0.1.4)
 A primeira versão totalmente funcional! Agora o plugin conta com:
@@ -10,7 +10,7 @@ Declinação Magnética: Cálculo automático integrado.
 
 📥 Instalação
 O OrIFSC já está disponível no repositório oficial do QGIS:
-Abra o QGIS.
+Abra o QGIS (versão 3.40 ou superior; compatível com o QGIS 4).
 Acesse o menu Complementos > Gerenciar e Instalar Complementos...
 Pesquise por OrIFSC e clique em Instalar.
 
@@ -22,10 +22,9 @@ Exportar: Exporte a base final diretamente para OCAD ou OOM e comece a desenhar.
 
 🚧 Próximas Implementações (Roadmap)
 
-[ ] Integração com modelo de elevação FABDEM.
-[ ] Geração de curvas de nível a partir de qualquer Raster/WMS (ex: MDT do SIG@SC).
+[x] Geração de curvas de nível a partir do MDT do SIG@SC (WCS, alta resolução).
+[x] Importação de arquivos GPX e KML.
 [ ] Inclusão automática de simbologia completa na exportação (ligação com arquivos de referência .crt).
-[ ] Importação de arquivos GPX e KML.
 
 📝 Créditos e Licença
 Autor: Arthur Berbert (@arthurberbert-ifsc)

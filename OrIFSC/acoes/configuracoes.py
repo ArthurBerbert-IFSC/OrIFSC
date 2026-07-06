@@ -5,6 +5,8 @@ todos os projetos — diferente de `comum.py`, que guarda o estado *do projeto*
 atual (folha, escala, EPSG). Outros passos leem esses padrões: `definir_local`
 pré-seleciona escala/folha/orientação e `gerar_curvas` usa a equidistância.
 """
+from typing import Any
+
 from qgis.core import QgsSettings
 from qgis.PyQt.QtWidgets import (
     QDialog, QFormLayout, QVBoxLayout, QHBoxLayout, QComboBox, QSpinBox,
@@ -17,50 +19,95 @@ PREFIXO = 'OrIFSC/'
 
 FOLHAS = ['A3', 'A4', 'A5']
 ORIENTACOES = ['Paisagem', 'Retrato']
-FONTES_DEM = ['Copernicus 30m', 'FABDEM (em breve)']
 
 PADROES = {
     'escala_padrao': 10000,
     'folha_padrao': 'A4',
     'orientacao_padrao': 'Paisagem',
     'equidistancia_padrao': 5,
-    'fonte_dem': 'copernicus',
     'pasta_saida': '',
 }
 
 
-def _get(chave):
+def _get(chave: str) -> Any:
+    """Lê uma preferência global em ``QgsSettings`` com fallback do plugin.
+
+    Args:
+        chave: Nome da chave dentro do prefixo ``OrIFSC/``.
+
+    Returns:
+        Any: Valor persistido ou valor padrão definido em ``PADROES``.
+
+    Usa escopo global para manter preferências entre projetos, conforme a
+    diretriz de separação entre estado de projeto (``QgsProject``) e padrões
+    globais (``QgsSettings``).
+    """
     return QgsSettings().value(PREFIXO + chave, PADROES[chave])
 
 
-def ler_escala_padrao():
+def ler_escala_padrao() -> int:
+    """Retorna a escala padrão global para novos fluxos de definição local.
+
+    Returns:
+        int: Denominador da escala.
+    """
     try:
         return int(_get('escala_padrao'))
     except (TypeError, ValueError):
         return PADROES['escala_padrao']
 
 
-def ler_equidistancia_padrao():
+def ler_equidistancia_padrao() -> int:
+    """Retorna a equidistância padrão de curvas em metros.
+
+    Returns:
+        int: Equidistância padrão.
+    """
     try:
         return int(_get('equidistancia_padrao'))
     except (TypeError, ValueError):
         return PADROES['equidistancia_padrao']
 
 
-def ler_folha_padrao():
+def ler_folha_padrao() -> str:
+    """Retorna o formato de folha padrão para novos diálogos.
+
+    Returns:
+        str: Nome da folha (A3, A4 ou A5).
+    """
     return str(_get('folha_padrao'))
 
 
-def ler_orientacao_padrao():
+def ler_orientacao_padrao() -> str:
+    """Retorna a orientação padrão de folha.
+
+    Returns:
+        str: ``Paisagem`` ou ``Retrato``.
+    """
     return str(_get('orientacao_padrao'))
 
 
-def ler_pasta_saida():
+def ler_pasta_saida() -> str:
+    """Retorna pasta padrão de saída para exportação.
+
+    Returns:
+        str: Caminho absoluto ou vazio.
+    """
     return str(_get('pasta_saida'))
 
 
 class DialogConfiguracoes(QDialog):
-    def __init__(self, parent=None):
+    """Diálogo de configuração global persistente do plugin."""
+
+    def __init__(self, parent=None) -> None:
+        """Monta UI e carrega preferências globais atuais.
+
+        Args:
+            parent: Widget pai opcional.
+
+        Mantém opções em ``QgsSettings`` para que o comportamento padrão seja
+        consistente entre projetos e sessões, como definido nas diretrizes.
+        """
         super().__init__(parent)
         self.setWindowTitle('OrIFSC — Configurações')
         self.setMinimumWidth(420)
@@ -87,14 +134,6 @@ class DialogConfiguracoes(QDialog):
         self.equi_spin.setSuffix(' m')
         form.addRow('Equidistância padrão:', self.equi_spin)
 
-        self.dem_combo = QComboBox()
-        self.dem_combo.addItems(FONTES_DEM)
-        # FABDEM ainda não implementado — item desabilitado.
-        item_fabdem = self.dem_combo.model().item(1)
-        if item_fabdem is not None:
-            item_fabdem.setEnabled(False)
-        form.addRow('Fonte de DEM:', self.dem_combo)
-
         pasta_box = QHBoxLayout()
         self.pasta_edit = QLineEdit()
         btn_pasta = QPushButton('…')
@@ -118,13 +157,17 @@ class DialogConfiguracoes(QDialog):
 
         self._carregar()
 
-    def _escolher_pasta(self):
+    def _escolher_pasta(self) -> None:
+        """Abre seletor de diretório para a pasta padrão de saída.
+        """
         pasta = QFileDialog.getExistingDirectory(
             self, 'Pasta de saída padrão', self.pasta_edit.text())
         if pasta:
             self.pasta_edit.setText(pasta)
 
-    def _carregar(self):
+    def _carregar(self) -> None:
+        """Carrega valores persistidos e preenche os controles da UI.
+        """
         self.escala_spin.setValue(ler_escala_padrao())
         self.equi_spin.setValue(ler_equidistancia_padrao())
         folha = ler_folha_padrao()
@@ -133,10 +176,10 @@ class DialogConfiguracoes(QDialog):
         ori = ler_orientacao_padrao()
         if ori in ORIENTACOES:
             self.orientacao_combo.setCurrentIndex(ORIENTACOES.index(ori))
-        self.dem_combo.setCurrentIndex(0)  # Copernicus (FABDEM desabilitado)
         self.pasta_edit.setText(ler_pasta_saida())
 
-    def _salvar(self):
+    def _salvar(self) -> None:
+        """Persiste as preferências globais escolhidas e fecha com sucesso."""
         s = QgsSettings()
         s.setValue(PREFIXO + 'escala_padrao', int(self.escala_spin.value()))
         s.setValue(PREFIXO + 'folha_padrao', self.folha_combo.currentText())
@@ -145,6 +188,5 @@ class DialogConfiguracoes(QDialog):
             self.orientacao_combo.currentText())
         s.setValue(PREFIXO + 'equidistancia_padrao',
                    int(self.equi_spin.value()))
-        s.setValue(PREFIXO + 'fonte_dem', 'copernicus')
         s.setValue(PREFIXO + 'pasta_saida', self.pasta_edit.text())
         self.accept()

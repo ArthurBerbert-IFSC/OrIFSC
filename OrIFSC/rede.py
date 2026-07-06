@@ -12,9 +12,10 @@ Ambos só aceitam esquemas http(s) (evita file:// e afins).
 from qgis.core import QgsBlockingNetworkRequest
 from qgis.PyQt.QtCore import QUrl
 from qgis.PyQt.QtNetwork import QNetworkRequest
+from typing import Callable, Dict, Iterable, Optional
 
 
-def baixar_bytes(url, user_agent='OrIFSC'):
+def baixar_bytes(url: str, user_agent: str = 'OrIFSC') -> bytes:
     """Baixa o conteúdo de uma URL http(s) pela rede do QGIS.
 
     Retorna ``bytes``. Levanta ``ValueError`` para esquemas não permitidos e
@@ -27,14 +28,20 @@ def baixar_bytes(url, user_agent='OrIFSC'):
         req.setRawHeader(b'User-Agent', user_agent.encode('ascii', 'ignore'))
     blocking = QgsBlockingNetworkRequest()
     err = blocking.get(req, forceRefresh=True)
-    if err != QgsBlockingNetworkRequest.NoError:
+    if err != QgsBlockingNetworkRequest.ErrorCode.NoError:
         raise RuntimeError(blocking.errorMessage())
     return bytes(blocking.reply().content())
 
 
-def baixar_varios(urls, user_agent='OrIFSC', max_conc=12,
-                  cancelado=None, progresso=None, timeout_ms=20000,
-                  tentativas=3, heartbeat=None):
+def baixar_varios(
+        urls: Iterable[str],
+        user_agent: str = 'OrIFSC',
+        max_conc: int = 12,
+        cancelado: Optional[Callable[[], bool]] = None,
+        progresso: Optional[Callable[[int, int], None]] = None,
+        timeout_ms: int = 20000,
+        tentativas: int = 3,
+        heartbeat: Optional[Callable[[int, int, int], None]] = None) -> Dict[str, Optional[bytes]]:
     """Baixa várias URLs http(s) em paralelo (pool de threads + ``urllib``).
 
     Por que ``urllib`` e não a rede do QGIS aqui:
@@ -71,7 +78,15 @@ def baixar_varios(urls, user_agent='OrIFSC', max_conc=12,
     cabec = {'User-Agent': user_agent or 'OrIFSC'}
     n_tent = max(1, int(tentativas))
 
-    def _baixar_uma(url):
+    def _baixar_uma(url: str) -> Optional[bytes]:
+        """Baixa uma URL com retentativas e respeito ao cancelamento.
+
+        Args:
+            url: Endereço HTTP/HTTPS da tile.
+
+        Returns:
+            Optional[bytes]: Conteúdo baixado ou ``None`` em erro/cancelamento.
+        """
         if not url.lower().startswith(('http://', 'https://')):
             return None
         for _ in range(n_tent):
@@ -79,13 +94,9 @@ def baixar_varios(urls, user_agent='OrIFSC', max_conc=12,
                 return None
             try:
                 req = urllib.request.Request(url, headers=cabec)
-                # Esquema validado no início da função (somente http/https), então
-                # urlopen não abre file:// nem esquemas custom (auditado —
-                # Bandit B310).
                 with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # nosec B310
                     return resp.read()
             except Exception:
-                # tenta de novo (throttling/queda)
                 continue
         return None
 
@@ -108,5 +119,5 @@ def baixar_varios(urls, user_agent='OrIFSC', max_conc=12,
             if not cancelando and cancelado and cancelado():
                 cancelando = True
                 for f in futuros:
-                    f.cancel()                # cancela as que ainda não iniciaram
+                    f.cancel()
     return resultados

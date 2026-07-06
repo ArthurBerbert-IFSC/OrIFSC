@@ -4,6 +4,8 @@ Cria a camada 'folha' (retângulo do tamanho real da folha na escala definida no
 Passo 2), com borda magenta e sem preenchimento. Chamada pelo diálogo de
 Definir Local logo após salvar o retângulo no projeto.
 """
+from typing import Any, Optional
+
 from qgis.core import (
     QgsVectorLayer, QgsFeature, QgsGeometry, QgsRectangle, QgsProject,
     QgsSymbol, QgsSingleSymbolRenderer,
@@ -14,7 +16,20 @@ from qgis.PyQt.QtGui import QColor
 from .comum import ler_folha, avisar_projeto_nao_configurado
 
 
-def criar_folha(iface, parent=None):
+def criar_folha(iface: Any, parent: Any = None) -> Optional[QgsVectorLayer]:
+    """Cria e ativa a camada ``folha`` a partir do estado persistido no projeto.
+
+    Args:
+        iface: Interface principal do QGIS.
+        parent: Widget pai opcional para mensagens de aviso.
+
+    Returns:
+        Optional[QgsVectorLayer]: Camada criada, ou ``None`` quando o projeto não
+        está configurado.
+
+    Usa o estado salvo em ``acoes.comum`` para manter regra de negócio central de
+    pré-requisito de projeto configurado antes dos fluxos dependentes.
+    """
     estado = ler_folha()
     if estado is None:
         avisar_projeto_nao_configurado(parent)
@@ -27,14 +42,13 @@ def criar_folha(iface, parent=None):
     folha.dataProvider().addFeatures([feat])
     folha.updateExtents()
 
-    # Simbologia: borda magenta, sem preenchimento
     simbolo = QgsSymbol.defaultSymbol(folha.geometryType())
     simbolo.symbolLayer(0).setStrokeColor(QColor(255, 0, 255))
     simbolo.symbolLayer(0).setStrokeWidth(1.2)
     simbolo.symbolLayer(0).setBrushStyle(Qt.BrushStyle.NoBrush)
     folha.setRenderer(QgsSingleSymbolRenderer(simbolo))
 
-    QgsProject.instance().addMapLayer(folha)  # vai para o topo
+    QgsProject.instance().addMapLayer(folha)
 
     canvas = iface.mapCanvas()
     canvas.setExtent(QgsRectangle(x0, y0, x1, y1))

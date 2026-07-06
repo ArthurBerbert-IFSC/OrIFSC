@@ -1,6 +1,5 @@
-Coloque aqui os 3 logotipos em PNG (de preferência com fundo transparente):
+Coloque aqui os logotipos em PNG (de preferência com fundo transparente):
 
-  oriesc.png  — Federação Catarinense de Orientação
   ifsc.png    — Instituto Federal de Santa Catarina
   flora.png   — Clube de Orientação de Florianópolis
 

@@ -14,19 +14,19 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import QPointF
 from qgis.PyQt.QtGui import QTransform
+from typing import Iterable, Optional, Tuple
 
 from .geo import (
     convergencia_utm, codigo_grade_zona, meridiano_central, zona_utm_de_epsg,
 )
 
-# Símbolo de curva embutido (curva mestra/intermediária genérica).
-COR_CURVA = (0.0, 0.56, 1.0, 0.18)   # CMYK (fração) — marrom de curva de nível
+COR_CURVA = (0.0, 0.56, 1.0, 0.18)
 COR_NOME = 'Marrom (curvas)'
-LARGURA_CURVA_UM = 140               # 0,14 mm em 1/1000 mm
-CODIGO_SIMBOLO = 101                 # "101" — curva de nível (ISOM)
+LARGURA_CURVA_UM = 140
+CODIGO_SIMBOLO = 101
 
 
-def centro_latlon(epsg, e, n):
+def centro_latlon(epsg: int, e: float, n: float) -> Tuple[float, float]:
     """Latitude/longitude (graus) de um ponto UTM."""
     crs_utm = QgsCoordinateReferenceSystem.fromEpsgId(epsg)
     crs_wgs = QgsCoordinateReferenceSystem.fromEpsgId(4326)
@@ -38,8 +38,28 @@ def centro_latlon(epsg, e, n):
 class ProjetoOcad:
     """Reúne tudo que os escritores precisam para gerar o projeto."""
 
-    def __init__(self, escala, epsg, folha_rect, declinacao, linhas_mundo,
-                 satelite=None):
+    def __init__(
+            self,
+            escala: int,
+            epsg: int,
+            folha_rect: Tuple[float, float, float, float],
+            declinacao: float,
+            linhas_mundo: Iterable[Iterable[Tuple[float, float]]],
+            satelite: Optional[dict] = None) -> None:
+        """Pré-processa dados cartográficos para escrita em OMAP/OCD.
+
+        Args:
+            escala: Escala do mapa (denominador).
+            epsg: CRS UTM WGS84 (326xx/327xx).
+            folha_rect: Retângulo da folha em metros UTM (x0, y0, x1, y1).
+            declinacao: Declinação magnética em graus.
+            linhas_mundo: Curvas em coordenadas UTM.
+            satelite: Metadados opcionais do GeoTIFF de fundo.
+
+        O cálculo de grivação e da transformação usa a mesma convenção do
+        OpenOrienteering Mapper para manter equivalência geométrica entre saída
+        ``.ocd`` e ``.omap``, conforme diretrizes do núcleo georreferenciado.
+        """
         self.escala = int(escala)
         self.epsg = int(epsg)
         self.zona, self.sul = zona_utm_de_epsg(self.epsg)
@@ -57,18 +77,13 @@ class ProjetoOcad:
         self.declinacao = float(declinacao)
         self.convergencia = convergencia_utm(
             self.lat, self.lon, meridiano_central(self.zona))
-        # Grivação = declinação − convergência (magnético em relação à grade),
-        # igual ao OOM. É o ângulo `a` do OCD e o `grivation` do .omap.
         self.grivacao = self.declinacao - self.convergencia
 
-        # Transform mapa(mm)→mundo, idêntico a
-        # Georeferencing::updateTransformation.
         t = QTransform()
         t.translate(self.ref_e, self.ref_n)
         t.rotate(-self.grivacao)
         s = self.escala / 1000.0
         t.scale(s, -s)
-        # map_ref_point = (0,0): translate(-0,-0) omitido.
         self._para_mapa, ok = t.inverted()
         if not ok:
             raise ValueError('Transform de georreferência não inversível.')
@@ -78,7 +93,6 @@ class ProjetoOcad:
         self.largura_um = LARGURA_CURVA_UM
         self.codigo_simbolo = CODIGO_SIMBOLO
 
-        # Converte as curvas para mm de papel (y para baixo).
         self.linhas_mm = [
             [self.mapa_mm(e, n) for (e, n) in linha]
             for linha in linhas_mundo if len(linha) >= 2
@@ -86,21 +100,21 @@ class ProjetoOcad:
 
         self.satelite = self._preparar_satelite(satelite)
 
-    def mapa_mm(self, e, n):
+    def mapa_mm(self, e: float, n: float) -> Tuple[float, float]:
         """Ponto do mundo (UTM) → papel do mapa em mm (y para baixo)."""
         p = self._para_mapa.map(QPointF(e, n))
         return p.x(), p.y()
 
-    def _preparar_satelite(self, sat):
+    def _preparar_satelite(self, sat: Optional[dict]) -> Optional[dict]:
         """Acrescenta ao dict do satélite o posicionamento de papel do OCD
         (centro em mm e tamanho do pixel em mm)."""
         if not sat:
             return None
         cx = sat['ulx'] + (sat['w'] / 2.0) * sat['px']
-        cy = sat['uly'] + (sat['h'] / 2.0) * sat['py']     # py é negativo
+        cy = sat['uly'] + (sat['h'] / 2.0) * sat['py']
         mcx, mcy = self.mapa_mm(cx, cy)
         sat = dict(sat)
         sat['centro_mm'] = (mcx, mcy)
-        sat['u_mm'] = sat['px'] * 1000.0 / self.escala     # mm por pixel (x)
-        sat['v_mm'] = abs(sat['py']) * 1000.0 / self.escala  # mm por pixel (y)
+        sat['u_mm'] = sat['px'] * 1000.0 / self.escala
+        sat['v_mm'] = abs(sat['py']) * 1000.0 / self.escala
         return sat

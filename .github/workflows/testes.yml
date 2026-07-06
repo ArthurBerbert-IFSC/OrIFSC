@@ -1,0 +1,28 @@
+name: Testes
+
+# Roda a suíte de testes dos módulos puros (sem QGIS) a cada push/PR.
+# Cobre: suavização Chaikin (equivalência bit a bit com a implementação
+# original), cálculos geográficos (UTM/convergência/grade) e os escritores
+# .ocd (binário OCAD 10) e .omap (XML do OpenOrienteering Mapper).
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências de teste
+        run: pip install pytest numpy
+
+      - name: Rodar testes
+        run: python -m pytest tests/ -v

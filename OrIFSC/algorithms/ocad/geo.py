@@ -6,10 +6,8 @@ chamada falhar (sem internet, serviço fora), o chamador usa o valor manual.
 """
 import json
 import math
+from typing import Optional, Tuple
 
-from ...rede import baixar_bytes
-
-# Chave "demo" usada pela própria calculadora web da NOAA (geomag-web).
 _NOAA_URL = (
     'https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination'
     '?lat1={lat}&lon1={lon}&key=zNEw7&resultFormat=json'
@@ -17,8 +15,16 @@ _NOAA_URL = (
 )
 
 
-def declinacao_noaa(lat, lon, ano, mes, dia):
+def declinacao_noaa(
+        lat: float,
+        lon: float,
+        ano: int,
+        mes: int,
+        dia: int) -> Optional[float]:
     """Declinação magnética (graus, leste +) pela NOAA/WMM, ou None se falhar."""
+    # Import tardio: mantém o resto do módulo (cálculos puros) importável e
+    # testável fora do QGIS.
+    from ...rede import baixar_bytes
     url = _NOAA_URL.format(lat=lat, lon=lon, ano=ano, mes=mes, dia=dia)
     try:
         dados = json.loads(baixar_bytes(url).decode('utf-8'))
@@ -27,7 +33,7 @@ def declinacao_noaa(lat, lon, ano, mes, dia):
         return None
 
 
-def convergencia_utm(lat_deg, lon_deg, lon0_deg):
+def convergencia_utm(lat_deg: float, lon_deg: float, lon0_deg: float) -> float:
     """Convergência meridiana (graus) num ponto UTM.
 
     Ângulo entre o norte verdadeiro e o norte da grade. Fórmula de 1ª ordem
@@ -38,12 +44,12 @@ def convergencia_utm(lat_deg, lon_deg, lon0_deg):
     return math.degrees(math.atan(math.tan(dlon) * math.sin(lat)))
 
 
-def meridiano_central(zona):
+def meridiano_central(zona: int) -> int:
     """Longitude (graus) do meridiano central de uma zona UTM."""
     return zona * 6 - 183
 
 
-def zona_utm_de_epsg(epsg):
+def zona_utm_de_epsg(epsg: int) -> Tuple[int, bool]:
     """(zona, sul) a partir de um EPSG WGS84/UTM (326xx ou 327xx)."""
     if 32601 <= epsg <= 32660:
         return epsg - 32600, False
@@ -52,7 +58,7 @@ def zona_utm_de_epsg(epsg):
     raise ValueError(f'EPSG {epsg} não é WGS84/UTM (esperado 326xx ou 327xx).')
 
 
-def codigo_grade_zona(epsg):
+def codigo_grade_zona(epsg: int) -> int:
     """Campo `i` do OCD (string 1039): grade·1000 + zona, negativo no Sul.
 
     Para UTM (OcdGrid::Utm = 2): Norte → 2000+zona; Sul → -(2000+zona).

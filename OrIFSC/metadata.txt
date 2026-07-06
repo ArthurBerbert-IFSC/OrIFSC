@@ -1,14 +1,14 @@
 [general]
 name=OrIFSC
-qgisMinimumVersion=3.16
+qgisMinimumVersion=3.40
 qgisMaximumVersion=4.99
 description=Generate cartographic base maps for the sport of orienteering
 description[pt]=Gerador de bases cartográficas para mapas de orientação esportiva
-version=0.1.9
+version=0.1.11
 author= arthur berbert
 email=arthur@berbert.eng.br
-about=OrIFSC automates the production of cartographic base maps for the sport of orienteering. It is a partnership between IFSC (Instituto Federal de Santa Catarina), the Santa Catarina Orienteering Federation (FCO) and the Florianópolis Orienteering Club (FLORA). The plugin loads a georeferenced satellite image, generates smoothed contour lines from free elevation data (Copernicus 30 m DEM) and exports a ready-to-open project for OCAD and OpenOrienteering Mapper, already set up with georeferencing, magnetic declination, the satellite backdrop and the contour lines as map objects.
-about[pt]=Plugin para geração automatizada de bases cartográficas para mapas de orientação esportiva, em parceria entre o IFSC, a Federação Catarinense de Orientação e o Clube de Orientação de Florianópolis. Carrega imagem georreferenciada de satélite, gera curvas de nível suavizadas (MDT Copernicus 30 m) e exporta um projeto pronto para abrir no OCAD e no OpenOrienteering Mapper, já com georreferência, declinação magnética, o satélite como fundo e as curvas como objetos.
+about=OrIFSC automates the production of cartographic base maps for the sport of orienteering. It is a partnership between IFSC (Instituto Federal de Santa Catarina) and the Florianópolis Orienteering Club (FLORA). The plugin loads a georeferenced satellite image, generates smoothed contour lines from free elevation data (Copernicus 30 m DEM) and exports a ready-to-open project for OCAD and OpenOrienteering Mapper, already set up with georeferencing, magnetic declination, the satellite backdrop and the contour lines as map objects.
+about[pt]=Plugin para geração automatizada de bases cartográficas para mapas de orientação esportiva, em parceria entre o IFSC e o Clube de Orientação de Florianópolis. Carrega imagem georreferenciada de satélite, gera curvas de nível suavizadas (MDT Copernicus 30 m) e exporta um projeto pronto para abrir no OCAD e no OpenOrienteering Mapper, já com georreferência, declinação magnética, o satélite como fundo e as curvas como objetos.
 tracker=https://github.com/arthurberbert-ifsc/orifsc/issues
 repository=https://github.com/arthurberbert-ifsc/orifsc
 hasProcessingProvider=yes
@@ -19,6 +19,20 @@ icon=icons/icon.svg
 experimental=False
 deprecated=False
 changelog=
+    0.1.11
+    - Correção importante nas curvas de nível (fonte Copernicus): a simplificação era aplicada com as curvas ainda em graus (EPSG:4326), o que equivalia a uma tolerância de ~22 km e deformava as curvas em "triângulos/retângulos". Agora as curvas são reprojetadas para o CRS UTM da folha ANTES da suavização, e a tolerância de 0,2 passa a valer 0,2 metro. A camada "Curvas de Nível" também passa a ser criada já em UTM.
+    - QGIS 4 (Qt6/PyQt6): todos os enums restantes migraram para a forma escopada (QMessageBox.Icon/ButtonRole/StandardButton, Qgis.MessageLevel, QgsBlockingNetworkRequest.ErrorCode, Qgis.ProcessingSourceType, Qgis.ProcessingNumberParameterType, Qgis.WkbType, QgsFeatureSink.Flag, Qgis.ProcessingAlgorithmFlag). Um único código atende QGIS 3.40+ e QGIS 4.
+    - Requisito mínimo atualizado para QGIS 3.40 LTR (versões anteriores não eram de fato suportadas: o código já usava APIs do QGIS 3.38+).
+    - Removida a opção FABDEM ("em breve") do menu Relevo e das Configurações.
+    - Curvas de nível muito mais rápidas: suavização Chaikin vetorizada com NumPy (resultado idêntico bit a bit, ~10-50x mais rápido), recorte com geometria preparada (índice GEOS) e pré-simplificação de 0,05 mm na escala do papel antes da suavização (invisível no mapa; essencial com o MDT de alta resolução do SIG@SC). O log agora mostra um contador dinâmico ("suavizando: N/total curvas") durante a etapa pesada.
+    - Correção de travamento (access violation) ao concluir a geração de curvas: o sink de saída agora é liberado (flush + del) antes de o QGIS carregar a camada no projeto.
+    - Exportação do satélite muito mais leve (PCs lentos): o mosaico agora é escrito por faixas direto no disco (streaming), eliminando a imagem gigante na RAM e o PNG intermediário — pico de memória cai de ~1,5 GB para menos de ~150 MB. Reprojeção (GDAL Warp) multithread. O GeoTIFF final continua idêntico: RGB, LZW, sem tiling — requisito do OCAD 10.
+    - Cache persistente (perfil do QGIS, limite de 1 GB com poda automática): tiles do MDT Copernicus e tiles do satélite ficam guardadas entre sessões — re-exportar a mesma área fica muito mais rápido. Tiles do Copernicus agora combinadas por mosaico virtual (VRT), sem reescrever o raster inteiro.
+    - Tolerância de simplificação das curvas agora acompanha a escala do projeto, derivada do menor objeto visível no papel (0,15 mm): 0,075 mm de papel por passada (duas passadas; desvio total < 0,15 mm, invisível), entre 0,1 m e 1,5 m. Mapas 1:2.000 preservam mais detalhe; 1:15.000 ficam bem mais leves.
+    - Arquivos temporários com nome único por execução (sem colisão entre execuções simultâneas).
+    - SIG@SC: a consulta ao serviço (GetCapabilities) agora roda em segundo plano (QgsTask) — o QGIS não congela mais no clique do menu enquanto o servidor, que é lento, responde; a camada aparece quando o serviço retornar.
+    - Correção de vazamento leve: as ações do menu agora são destruídas junto com o menu ao recarregar/desinstalar o plugin.
+    - Qualidade: suíte de testes automatizados (pytest, 23 testes) cobrindo o escritor binário OCAD, o XML do OOM, os cálculos UTM/convergência e a suavização Chaikin (equivalência bit a bit com a implementação original); roda em CI (GitHub Actions) a cada alteração.
     0.1.9
     - SIG@SC (Santa Catarina): as camadas passam a ser adicionadas pelo gerenciador WMS/WMTS nativo do QGIS (assíncrono — não trava mais o QGIS); ortofoto via WMTS e o CRS acompanha o projeto (reprojeção on-the-fly). Código formatado (PEP8/flake8).
     - Curvas de nível: nova opção "Fonte do MDT" — além do Copernicus 30 m (global, padrão), dá para usar o MDT de SC via WCS do SIG@SC (alta resolução), gerando curvas bem melhores em Santa Catarina.
