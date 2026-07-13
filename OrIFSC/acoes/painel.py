@@ -16,44 +16,40 @@ PNG (SVG não renderiza). Os componentes visuais (cabeçalho de marca, card,
 seção, bullets, passos, dica) e a paleta vivem aqui, em `CORES` + helpers `_*`,
 para que todas as telas falem a mesma linguagem visual.
 
-Os logos ficam em `recursos/` (ORIESC.jpg, ifsc.png, FLORA.png) e o ícone do
+Os logos ficam em `recursos/` (ifsc.png, FLORA.png) e o ícone do
 card em `recursos/mdt.png`. Se um arquivo não existir, a `<img>` simplesmente
 não aparece — título e instruções continuam visíveis (degradação suave).
 """
 import os
+from typing import Any, Iterable, Optional, Sequence
 
 from qgis.PyQt.QtWidgets import QTextBrowser, QHBoxLayout
 
 RECURSOS = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'recursos')
 
-# (arquivo, legenda) na ordem de exibição.
 LOGOS = [
-    ('ORIESC.jpg', 'Federação Catarinense de Orientação'),
     ('ifsc.png', 'Instituto Federal de Santa Catarina'),
     ('FLORA.png', 'Clube de Orientação de Florianópolis'),
 ]
 
-# Paleta do handoff (handoff-painel.md) — fonte única de cor dos componentes.
 CORES = {
-    'acento': '#f1592a',   # laranja-picota
-    'texto': '#23262a',   # texto principal
-    'texto2': '#7c828a',   # texto secundário
-    'texto_desc': '#3a3e43',   # descrição (bullets)
-    'fundo': '#f6f4ef',   # fundo do painel
-    'cabec_bg': '#ffffff',   # cabeçalho de marca
+    'acento': '#f1592a',
+    'texto': '#23262a',
+    'texto2': '#7c828a',
+    'texto_desc': '#3a3e43',
+    'fundo': '#f6f4ef',
+    'cabec_bg': '#ffffff',
     'cabec_borda': '#e6e2d8',
     'card_bg': '#ffffff',
     'card_borda': '#e3dfd6',
-    'dica_bg': '#fdf2e9',   # caixa de dica (creme)
+    'dica_bg': '#fdf2e9',
     'dica_borda': '#f6d3b8',
     'dica_txt': '#8a5a36',
 }
-C = CORES  # alias curto, usado pelos helpers
+C = CORES
 
 
-# --------------------------------------------------------------------- imagens
-
-def _uri(arquivo):
+def _uri(arquivo: str) -> str:
     """`file:///...` para um arquivo de `recursos/`, ou '' se não existir."""
     caminho = os.path.join(RECURSOS, arquivo)
     if not os.path.exists(caminho):
@@ -61,7 +57,7 @@ def _uri(arquivo):
     return 'file:///' + caminho.replace('\\', '/')
 
 
-def logos_html(altura=60):
+def logos_html(altura: int = 60) -> str:
     """Faixa <img> com os logos existentes em RECURSOS, centralizada. Vazio se
     nenhum arquivo estiver presente."""
     partes = []
@@ -75,16 +71,15 @@ def logos_html(altura=60):
     return '<p align="center">' + '&nbsp;&nbsp;&nbsp;'.join(partes) + '</p>'
 
 
-# ----------------------------------------------------------------- componentes
-
-def _esp(altura=10):
+def _esp(altura: int = 10) -> str:
     """Espaçador vertical entre blocos (margens de tabela são pouco confiáveis
     no Qt rich text, então usamos uma linha vazia com altura fixa)."""
     return (f'<table cellspacing="0" cellpadding="0" width="100%"><tr>'
             f'<td height="{altura}"></td></tr></table>')
 
 
-def _cabecalho_marca(titulo, logo='FLORA.png', rotulo='ORIFSC'):
+def _cabecalho_marca(
+        titulo: str, logo: str = 'FLORA.png', rotulo: str = 'ORIFSC') -> str:
     """Cabeçalho branco com borda inferior: logo + rótulo da marca + título.
     Retorna uma `<tr>` da tabela externa montada por `painel_html`."""
     uri = _uri(logo)
@@ -103,7 +98,7 @@ def _cabecalho_marca(titulo, logo='FLORA.png', rotulo='ORIFSC'):
     )
 
 
-def _card(titulo, subtitulo, icone=None):
+def _card(titulo: str, subtitulo: str, icone: Optional[str] = None) -> str:
     """Card branco com borda: ícone PNG (opcional) + título + subtítulo. Usado
     como "card de fonte de dados"."""
     uri = _uri(icone) if icone else ''
@@ -126,13 +121,13 @@ def _card(titulo, subtitulo, icone=None):
     )
 
 
-def _secao(rotulo):
+def _secao(rotulo: str) -> str:
     """Rótulo de seção em cinza, MAIÚSCULAS (ex.: "O QUE FAZ")."""
     return (f'<p style="color:{C["texto2"]}; font-size:10px;">'
             f'<b>{rotulo.upper()}</b></p>')
 
 
-def _bullets(itens):
+def _bullets(itens: Sequence[str]) -> str:
     """Lista sem ordem; cada item com marcador laranja. `itens` = lista de HTML.
     Use quando a ordem não importa (o conteúdo pode mudar)."""
     linhas = ''
@@ -147,7 +142,7 @@ def _bullets(itens):
     return f'<table cellspacing="0" cellpadding="0">{linhas}</table>'
 
 
-def _passos(itens):
+def _passos(itens: Iterable[Any]) -> str:
     """Lista ordenada; número em célula laranja + título/descrição. `itens` =
     lista de (titulo, descricao) ou strings. Use para fluxos com ordem."""
     linhas = ''
@@ -169,7 +164,7 @@ def _passos(itens):
     return f'<table cellspacing="0" cellpadding="0">{linhas}</table>'
 
 
-def _dica(texto):
+def _dica(texto: str) -> str:
     """Caixa de dica creme com "!" laranja."""
     return (
         '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
@@ -181,9 +176,7 @@ def _dica(texto):
     )
 
 
-# ----------------------------------------------------------------- montagem
-
-def painel_html(titulo, instrucoes_html, rotulo='ORIFSC'):
+def painel_html(titulo: str, instrucoes_html: str, rotulo: str = 'ORIFSC') -> str:
     """HTML completo do painel (chrome): cabeçalho de marca + instruções +
     rodapé de logos, tudo sobre o fundo da paleta. Se `titulo` for vazio, o
     cabeçalho é omitido (degradação suave). `rotulo` é o texto pequeno acima do
@@ -201,8 +194,12 @@ def painel_html(titulo, instrucoes_html, rotulo='ORIFSC'):
     )
 
 
-def criar_painel(titulo, instrucoes_html, parent=None,
-                 largura=320, altura_min=340):
+def criar_painel(
+        titulo: str,
+        instrucoes_html: str,
+        parent: Any = None,
+        largura: int = 320,
+        altura_min: int = 340) -> QTextBrowser:
     """QTextBrowser estilizado com o conteúdo do painel, para embutir como
     coluna direita de um QDialog próprio. `altura_min` garante que o diálogo
     cresça o suficiente para o texto de ajuda caber sem rolar."""
@@ -216,8 +213,13 @@ def criar_painel(titulo, instrucoes_html, parent=None,
     return tb
 
 
-def montar_com_painel(dialog, conteudo_layout, titulo, instrucoes_html,
-                      largura=320, altura_min=340):
+def montar_com_painel(
+        dialog: Any,
+        conteudo_layout: Any,
+        titulo: str,
+        instrucoes_html: str,
+        largura: int = 320,
+        altura_min: int = 340) -> None:
     """Define o layout do `dialog` como [conteúdo | painel lateral].
 
     `conteudo_layout` deve ser um QLayout ainda SEM parent (criado com
@@ -233,8 +235,6 @@ def montar_com_painel(dialog, conteudo_layout, titulo, instrucoes_html,
             largura,
             altura_min))
 
-
-# ----------------------------------------------------------------- conteúdo
 
 INSTRUCOES = {
     'definir_local': (
@@ -271,7 +271,8 @@ INSTRUCOES = {
             '(a folha ou o limite).',
         ])
         + _esp()
-        + _dica('Deixe <b>Recortar por</b> em branco para gerar sem recorte.')
+        + _dica('Deixe <b>Recortar por</b> em branco para recortar pela '
+                'própria área a mapear (não precisa selecioná-la de novo).')
     ),
     'importar_kml_gpx': (
         _secao('O que faz')
@@ -294,7 +295,10 @@ INSTRUCOES = {
             '<b>Georreferência</b> (UTM, escala e grade) e <b>declinação '
             'magnética</b> (automática via WMM/NOAA, ou manual).',
             'O <b>satélite</b> como mapa de fundo georreferenciado.',
-            'As <b>curvas de nível</b> já como objetos de linha.',
+            'As <b>curvas de nível</b> já como objetos de linha '
+            '(mestras no símbolo 102 a cada 5ª equidistância).',
+            'A <b>paleta de símbolos oficial</b> (ISOM 2017-2 ou '
+            'ISSprOM 2019-2) pronta para desenhar.',
         ])
         + _esp()
         + _dica('Posicione a folha e salve as edições antes de gerar. Mantenha '

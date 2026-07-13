@@ -5,6 +5,7 @@ informação.
 """
 import os
 import configparser
+from typing import Any, Mapping
 
 from qgis.core import QgsSettings
 from qgis.PyQt.QtWidgets import (
@@ -19,19 +20,27 @@ _METADATA = os.path.join(
     'metadata.txt')
 
 
-def _geral():
+def _geral() -> Mapping[str, str]:
+    """Lê seção ``[general]`` do metadata do plugin.
+
+    Returns:
+        Mapping[str, str]: Metadados públicos do plugin.
+
+    Centraliza leitura de versão e links para evitar duplicação de informação
+    entre arquivos, conforme diretriz de manutenção.
+    """
     cfg = configparser.RawConfigParser()
     cfg.read(_METADATA, encoding='utf-8')
     return cfg['general'] if cfg.has_section('general') else {}
 
 
-def _idioma():
+def _idioma() -> str:
     """Código de idioma do QGIS (ex.: 'pt'), ou '' se indefinido."""
     loc = QgsSettings().value('locale/userLocale', '') or ''
     return loc.split('_')[0].lower()
 
 
-def _localizado(g, chave):
+def _localizado(g: Mapping[str, str], chave: str) -> str:
     """Valor de `chave` no idioma do QGIS (chave[xx]) com fallback para o
     padrão (inglês). O metadata.txt traz description/about em inglês e a
     variante [pt] em português."""
@@ -43,7 +52,7 @@ def _localizado(g, chave):
     return g.get(chave, '')
 
 
-def sobre(parent=None):
+def sobre(parent: Any = None) -> None:
     """Janela "Sobre" — mesmo visual do painel lateral (cabeçalho de marca +
     rodapé de logos), num QDialog com QTextBrowser em vez de QMessageBox para
     controlar largura e fundo da paleta."""
@@ -88,7 +97,12 @@ def sobre(parent=None):
     dlg.exec()
 
 
-def abrir_documentacao():
+def abrir_documentacao() -> None:
+    """Abre a documentação preferencial do plugin no navegador.
+
+    Usa ``homepage`` com fallback para ``repository`` para manter um destino
+    válido mesmo quando só um dos campos estiver presente no metadata.
+    """
     g = _geral()
     url = g.get('homepage') or g.get('repository') or ''
     if url:

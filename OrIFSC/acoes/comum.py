@@ -4,13 +4,15 @@ Os passos são ações independentes do menu, então os parâmetros definidos no
 Passo 2 (EPSG e o retângulo da folha) ficam guardados como propriedades do
 projeto — sobrevivem a salvar/reabrir o .qgz.
 """
-from qgis.core import QgsProject, QgsVectorLayer
+from typing import Any, List, Optional, Tuple
+
+from qgis.core import QgsProject, QgsVectorLayer, Qgis
 from qgis.PyQt.QtWidgets import QMessageBox
 
 ESCOPO = 'OrIFSC'
 
 
-def salvar_folha(epsg, x0, y0, x1, y1):
+def salvar_folha(epsg: int, x0: float, y0: float, x1: float, y1: float) -> None:
     """Grava no projeto o EPSG UTM e o retângulo da folha (definidos no Passo 2)."""
     proj = QgsProject.instance()
     proj.writeEntry(ESCOPO, 'epsg', int(epsg))
@@ -20,19 +22,19 @@ def salvar_folha(epsg, x0, y0, x1, y1):
     proj.writeEntryDouble(ESCOPO, 'folha_y1', float(y1))
 
 
-def salvar_escala(escala):
+def salvar_escala(escala: int) -> None:
     """Grava o denominador da escala (Passo 2) — usado pela exportação para
     dimensionar a imagem na resolução real (mm da folha × DPI)."""
     QgsProject.instance().writeEntry(ESCOPO, 'escala', int(escala))
 
 
-def ler_escala():
+def ler_escala() -> Optional[int]:
     """Retorna o denominador da escala salvo no Passo 2, ou None se ausente."""
     val, ok = QgsProject.instance().readNumEntry(ESCOPO, 'escala', 0)
     return val if ok and val > 0 else None
 
 
-def ler_folha():
+def ler_folha() -> Optional[Tuple[int, float, float, float, float]]:
     """Retorna (epsg, x0, y0, x1, y1) ou None se o Passo 2 ainda não rodou."""
     proj = QgsProject.instance()
     epsg, ok = proj.readNumEntry(ESCOPO, 'epsg', 0)
@@ -45,51 +47,45 @@ def ler_folha():
     return epsg, x0, y0, x1, y1
 
 
-def projeto_configurado():
+def projeto_configurado() -> bool:
     """True se o Passo 2 (Definir Local e Criar Folha) já foi executado."""
     return ler_folha() is not None
 
 
-def avisar_projeto_nao_configurado(parent=None):
-    """Aviso padrão quando um passo é chamado sem o projeto estar configurado."""
-    QMessageBox.warning(
-        parent, 'OrIFSC',
-        'Rode antes o passo "Definir Local e Criar Folha" para configurar o '
-        'projeto (coordenada, escala e folha).')
+def avisar_projeto_nao_configurado(parent: Any = None) -> None:
+    """Avisa que o projeto precisa ser configurado antes do fluxo atual."""
+    mensagem = (
+        'Antes de continuar, use o menu "Definir Local e Criar Folha" para '
+        'configurar coordenada, escala e folha.')
+    if parent is not None and hasattr(parent, 'messageBar'):
+        parent.messageBar().pushMessage('OrIFSC', mensagem,
+                                        level=Qgis.MessageLevel.Warning,
+                                        duration=6)
+        return
+    QMessageBox.warning(parent, 'OrIFSC', mensagem)
 
 
-# --------------------------------------------------------------- camadas
-def _geom(nome_novo, nome_legado):
-    """Enum de tipo de geometria compatível com QGIS 3 e 4 (Qt6)."""
-    try:
-        from qgis.core import Qgis
-        return getattr(Qgis.GeometryType, nome_novo)
-    except (ImportError, AttributeError):
-        from qgis.core import QgsWkbTypes
-        return getattr(QgsWkbTypes, nome_legado)
-
-
-def camadas_poligono():
+def camadas_poligono() -> List[QgsVectorLayer]:
     """Camadas vetoriais de polígono carregadas no projeto."""
-    g = _geom('Polygon', 'PolygonGeometry')
     return [c for c in QgsProject.instance().mapLayers().values()
-            if isinstance(c, QgsVectorLayer) and c.geometryType() == g]
+            if isinstance(c, QgsVectorLayer)
+            and c.geometryType() == Qgis.GeometryType.Polygon]
 
 
-def camada_curvas():
+def camada_curvas() -> Optional[QgsVectorLayer]:
     """Camada de linha cujo nome sugere curvas de nível, ou None.
 
     Heurística simples (nome contém "urva"), usada pelo guia de status do menu e
     pelo pré-preenchimento da exportação. O usuário sempre pode escolher outra.
     """
-    g = _geom('Line', 'LineGeometry')
     for c in QgsProject.instance().mapLayers().values():
-        if (isinstance(c, QgsVectorLayer) and c.geometryType() == g
+        if (isinstance(c, QgsVectorLayer)
+                and c.geometryType() == Qgis.GeometryType.Line
                 and 'urva' in c.name().lower()):
             return c
     return None
 
 
-def tem_camada_curvas():
+def tem_camada_curvas() -> bool:
     """True se há uma camada que parece ser de curvas de nível."""
     return camada_curvas() is not None

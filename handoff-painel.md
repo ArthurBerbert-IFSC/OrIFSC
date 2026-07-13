@@ -37,7 +37,7 @@ Referência visual para reproduzir no `painel.py`. **Veja também a imagem anexa
    - **Recorte opcional** — corta as curvas na borda de uma camada (folha ou limite).
    - Marcador = bolinha laranja `#f1592a` (NÃO use número/ordem — o conteúdo pode mudar).
 4. **Caixa de dica** — fundo creme: "Deixe *Recortar por* em branco para gerar sem recorte."
-5. **Rodapé de logos** — ORIESC · IFSC · FLORA centralizados (já existe em `logos_html()`).
+5. **Rodapé de logos** — IFSC · FLORA centralizados (já existe em `logos_html()`).
 
 ---
 

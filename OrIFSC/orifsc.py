@@ -1,40 +1,50 @@
+"""Plugin principal do OrIFSC: menu, ações e integração com Processing."""
+
 import os
+from typing import Any, Dict, List, Optional
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMenu, QMessageBox
-from qgis.core import QgsApplication
+from qgis.PyQt.QtWidgets import QAction, QMenu
+from qgis.core import QgsApplication, Qgis
 from .provider import OrIFSCProvider
 
-# Sentinela de separador na definição declarativa do menu.
 SEP = object()
 
 ICONS_DIR = os.path.join(os.path.dirname(__file__), 'icons')
 
 
-def _icone(nome):
+def _icone(nome: str) -> QIcon:
     """QIcon do arquivo em icons/, ou QIcon() vazio se não houver nome."""
     return QIcon(os.path.join(ICONS_DIR, nome)) if nome else QIcon()
 
 
 class OrIFSCPlugin:
-    def __init__(self, iface):
-        self.iface = iface
-        self.menu_orifsc = None
-        self.actions = []
-        self.acoes_por_id = {}     # id lógico -> QAction (etapas do fluxo)
-        self._titulos_base = {}    # id lógico -> título sem prefixo de status
-        self.provider = None
+    """Controla o ciclo de vida do plugin e o menu OrIFSC no QGIS."""
 
-    # ------------------------------------------------------------------ GUI
-    def initGui(self):
-        # Registra o provider (algoritmos ficam ocultos da Caixa de Ferramentas,
-        # acessíveis apenas pelo menu OrIFSC)
+    def __init__(self, iface: Any) -> None:
+        """Inicializa estado da casca de UI do plugin.
+
+        Args:
+            iface: Interface do QGIS injetada pelo carregador de plugins.
+
+        Mantém referências das ações e títulos-base para atualizar o menu sem
+        duplicar lógica entre módulos, conforme a arquitetura centralizada em
+        ``orifsc.py`` definida nas diretrizes.
+        """
+        self.iface = iface
+        self.menu_orifsc: Optional[QMenu] = None
+        self.actions: List[QAction] = []
+        self.acoes_por_id: Dict[str, QAction] = {}
+        self._titulos_base: Dict[str, str] = {}
+        self.provider: Optional[OrIFSCProvider] = None
+
+    def initGui(self) -> None:
+        """Inicializa provider, constrói o menu e conecta atualização de status."""
         self.provider = OrIFSCProvider()
         QgsApplication.processingRegistry().addProvider(self.provider)
 
         menu_bar = self.iface.mainWindow().menuBar()
         self.menu_orifsc = QMenu('OrIFSC', self.iface.mainWindow())
 
-        # Insere antes do menu Ajuda
         ajuda = None
         for action in menu_bar.actions():
             m = action.menu()
@@ -48,12 +58,9 @@ class OrIFSCPlugin:
 
         self._construir_menu(self.menu_orifsc, self._definicao_menu())
 
-        # Guia suave: ao abrir o menu, marca etapas concluídas (✓) e a próxima
-        # sugerida (▶), sem desabilitar nada — o fluxo é intuitivo, não
-        # obrigatório.
         self.menu_orifsc.aboutToShow.connect(self._atualizar_status_menu)
 
-    def _definicao_menu(self):
+    def _definicao_menu(self) -> List[Any]:
         """Estrutura declarativa do menu. Para adicionar uma função, basta
         incluir um dict aqui e escrever o slot correspondente.
 
@@ -90,8 +97,6 @@ class OrIFSCPlugin:
             {'titulo': 'Relevo', 'itens': [
                 {'titulo': 'Gerar Curvas de Nível', 'slot': self._gerar_curvas,
                     'icone': 'curvas.svg', 'id': 'gerar_curvas'},
-                {'titulo': 'Fonte de DEM: FABDEM (em breve)', 'slot': None,
-                 'habilitado': False, 'icone': 'dem.svg'},
             ]},
             {'titulo': 'Dados Públicos', 'itens': [
                 {'titulo': 'Santa Catarina', 'itens': [
@@ -123,7 +128,7 @@ class OrIFSCPlugin:
             ]},
         ]
 
-    def _construir_menu(self, menu, itens):
+    def _construir_menu(self, menu: QMenu, itens: List[Any]) -> None:
         """Monta recursivamente um QMenu a partir da definição declarativa."""
         for it in itens:
             if it is SEP:
@@ -132,11 +137,10 @@ class OrIFSCPlugin:
                 sub = menu.addMenu(it['titulo'])
                 self._construir_menu(sub, it['itens'])
             else:
-                act = QAction(
-                    _icone(
-                        it.get('icone')),
-                    it['titulo'],
-                    self.iface.mainWindow())
+                # Parent no próprio menu (não no mainWindow): o deleteLater()
+                # do menu em unload() remove as ações em cascata, sem QAction
+                # órfã acumulando entre recargas do plugin.
+                act = QAction(_icone(it.get('icone')), it['titulo'], menu)
                 slot = it.get('slot')
                 if slot is not None:
                     act.triggered.connect(slot)
@@ -148,7 +152,7 @@ class OrIFSCPlugin:
                     self.acoes_por_id[aid] = act
                     self._titulos_base[aid] = it['titulo']
 
-    def _atualizar_status_menu(self):
+    def _atualizar_status_menu(self) -> None:
         """Marca as etapas-chave do fluxo: ✓ concluída, ▶ próxima sugerida.
 
         Não altera o que está habilitado — todos os itens seguem clicáveis. É só
@@ -167,18 +171,24 @@ class OrIFSCPlugin:
         for aid, act in self.acoes_por_id.items():
             base = self._titulos_base.get(aid, act.text())
             if feito.get(aid):
-                act.setText('✓  ' + base)      # ✓ etapa concluída
+                act.setText('✓  ' + base)
             elif aid == proximo:
-                act.setText('▶  ' + base)      # ▶ próxima sugerida
+                act.setText('▶  ' + base)
             else:
                 act.setText(base)
 
-    def unload(self):
+    def unload(self) -> None:
+        """Remove menu, ações e provider de Processing ao descarregar.
+
+        As ações são parenteadas no menu, então o deleteLater() do menu
+        remove tudo em cascata — sem referências órfãs entre recargas.
+        """
         if self.menu_orifsc:
-            # Deletar o QMenu raiz remove submenus e ações filhas.
             self.menu_orifsc.deleteLater()
             self.menu_orifsc = None
         self.actions.clear()
+        self.acoes_por_id.clear()
+        self._titulos_base.clear()
         if self.provider:
             try:
                 QgsApplication.processingRegistry().removeProvider(self.provider)
@@ -186,71 +196,107 @@ class OrIFSCPlugin:
                 pass
         self.provider = None
 
-    # --------------------------------------------------------------- slots
-    def _definir_local(self):
+    def _definir_local(self) -> None:
+        """Abre o diálogo de definição de local e criação da folha.
+
+        O import é tardio para preservar tempo de carregamento inicial da casca
+        de UI, padrão recomendado nas diretrizes.
+        """
         from .acoes.definir_local import DialogDefinirLocal
         dlg = DialogDefinirLocal(self.iface, self.iface.mainWindow())
         dlg.exec()
 
-    def _criar_limite(self):
+    def _criar_limite(self) -> None:
+        """Cria a camada de limite do projeto atual.
+        """
         from .acoes.criar_limite import criar_limite
-        criar_limite(self.iface, self.iface.mainWindow())
+        criar_limite(self.iface, self.iface)
 
-    def _carregar_satelite(self):
+    def _carregar_satelite(self) -> None:
+        """Carrega a base de satélite no projeto.
+        """
         from .acoes.carregar_satelite import carregar_satelite
-        carregar_satelite(self.iface, self.iface.mainWindow())
+        layer = carregar_satelite(self.iface, self.iface)
+        if layer is not None:
+            self.iface.messageBar().pushMessage(
+                'OrIFSC',
+                'Satélite carregado com sucesso.',
+                level=Qgis.MessageLevel.Success,
+                duration=4)
 
-    def _base_osm(self):
+    def _base_osm(self) -> None:
+        """Carrega a base OpenStreetMap no projeto.
+        """
         from .acoes.bases import adicionar_osm
-        adicionar_osm(self.iface, self.iface.mainWindow())
+        layer = adicionar_osm(self.iface, self.iface)
+        if layer is not None:
+            self.iface.messageBar().pushMessage(
+                'OrIFSC',
+                'OpenStreetMap carregado com sucesso.',
+                level=Qgis.MessageLevel.Success,
+                duration=4)
 
-    def _base_wms(self):
+    def _base_wms(self) -> None:
+        """Abre o gerenciador nativo WMS/WMTS do QGIS.
+        """
         from .acoes.bases import abrir_gerenciador_wms
-        abrir_gerenciador_wms(self.iface, self.iface.mainWindow())
+        abriu = abrir_gerenciador_wms(self.iface, self.iface)
+        if abriu:
+            self.iface.messageBar().pushMessage(
+                'OrIFSC',
+                'Gerenciador WMS/WMTS aberto.',
+                level=Qgis.MessageLevel.Success,
+                duration=4)
 
-    def _importar_kml_gpx(self):
+    def _importar_kml_gpx(self) -> None:
+        """Abre o diálogo de importação KML/GPX.
+        """
         from .acoes.importar_kml_gpx import DialogImportarKmlGpx
         dlg = DialogImportarKmlGpx(self.iface, self.iface.mainWindow())
         dlg.exec()
 
-    def _gerar_curvas(self):
-        # Curvas precisam de uma camada de área (polígono) que defina a extensão.
-        # Não é trava de ordem: qualquer polígono serve; mas sem nenhum o diálogo
-        # não teria como rodar — então avisamos de forma clara.
+    def _gerar_curvas(self) -> None:
+        """Abre o diálogo de curvas quando há pelo menos uma camada poligonal."""
         from .acoes.comum import camadas_poligono
         if not camadas_poligono():
-            QMessageBox.information(
-                self.iface.mainWindow(), 'OrIFSC',
-                'Para gerar curvas é preciso uma camada de área (polígono) que '
-                'defina a extensão do terreno.\n\nO caminho mais fácil é rodar '
-                'antes "Definir Local e Criar Folha" (ou "Camada de Limite"). '
-                'Você também pode usar qualquer camada de polígono já carregada.')
+            self.iface.messageBar().pushMessage(
+                'OrIFSC',
+                'Para gerar curvas, adicione primeiro uma camada poligonal que '
+                'delimite a área de trabalho. Você pode usar "Definir Local e '
+                'Criar Folha" ou "Camada de Limite".',
+                level=Qgis.MessageLevel.Warning,
+                duration=8)
             return
         import processing
         processing.execAlgorithmDialog('orifsc:gerar_curvas_nivel', {})
 
-    def _sigsc_adicionar(self):
+    def _sigsc_adicionar(self) -> None:
+        """Executa o fluxo guiado de dados públicos do SIG@SC.
+        """
         from .acoes.dados_publicos_sc import adicionar_sigsc
-        adicionar_sigsc(self.iface, self.iface.mainWindow())
+        adicionar_sigsc(self.iface, self.iface)
 
-    def _abrir_sigsc(self):
+    def _abrir_sigsc(self) -> None:
+        """Abre o portal SIG@SC no navegador padrão.
+        """
         from .acoes.dados_publicos_sc import abrir_portal
         abrir_portal()
 
-    def _exportar_ocad(self):
+    def _exportar_ocad(self) -> None:
+        """Abre o diálogo de exportação OCAD/OOM com pré-preenchimento.
+
+        As diretrizes exigem projeto configurado e CRS UTM/WGS84 antes de
+        exportar; por isso o fluxo valida estado em ``acoes.comum`` antes de
+        abrir o algoritmo.
+        """
         from qgis.core import QgsProject
         from .acoes.comum import (projeto_configurado,
                                   avisar_projeto_nao_configurado, camada_curvas)
         from .acoes.configuracoes import ler_pasta_saida
-        # Exportar depende mesmo de folha/escala/CRS; sem isso o projeto OCAD não
-        # pode ser montado. Avisa de forma amigável em vez do erro do
-        # Processing.
         if not projeto_configurado():
-            avisar_projeto_nao_configurado(self.iface.mainWindow())
+            avisar_projeto_nao_configurado(self.iface)
             return
 
-        # Pré-preenche o diálogo: camada da folha, curvas e pasta de saída
-        # padrão.
         params = {}
         folhas = QgsProject.instance().mapLayersByName('folha')
         if folhas:
@@ -265,15 +311,21 @@ class OrIFSCPlugin:
         import processing
         processing.execAlgorithmDialog('orifsc:exportar_ocad', params)
 
-    def _configuracoes(self):
+    def _configuracoes(self) -> None:
+        """Abre o diálogo de configurações globais.
+        """
         from .acoes.configuracoes import DialogConfiguracoes
         dlg = DialogConfiguracoes(self.iface.mainWindow())
         dlg.exec()
 
-    def _documentacao(self):
+    def _documentacao(self) -> None:
+        """Abre a documentação principal do plugin.
+        """
         from .acoes.ajuda import abrir_documentacao
         abrir_documentacao()
 
-    def _sobre(self):
+    def _sobre(self) -> None:
+        """Abre a janela "Sobre" do plugin.
+        """
         from .acoes.ajuda import sobre
         sobre(self.iface.mainWindow())

@@ -6,20 +6,21 @@ Coordenadas de objeto em 1/1000 mm (nativo do OOM), y para baixo.
 """
 import os
 from xml.sax.saxutils import escape, quoteattr
+from typing import Any, Iterable, Tuple
 
 
-def _num(v):
+def _num(v: float) -> str:
     """Formata fração CMYK sem zeros à toa: 0, 0.56, 1, 0.18."""
     return '%g' % v
 
 
-def _coords_xml(linha):
+def _coords_xml(linha: Iterable[Tuple[float, float]]) -> str:
     """'x y;x y;...' em 1/1000 mm a partir de uma lista de (mm, mm)."""
     return ''.join('%d %d;' % (round(mx * 1000), round(my * 1000))
                    for (mx, my) in linha)
 
 
-def escrever_omap(proj, caminho):
+def escrever_omap(proj: Any, caminho: str) -> str:
     """Gera o .omap em `caminho` a partir de um ProjetoOcad."""
     c, m, y, k = proj.cor
     partes = []
@@ -30,7 +31,6 @@ def escrever_omap(proj, caminho):
         'version="9">')
     add('<notes></notes>')
 
-    # --- Georreferência ---------------------------------------------------
     add('<georeferencing scale="%d" declination="%.4f" grivation="%.4f">'
         % (proj.escala, proj.declinacao, proj.grivacao))
     add('<projected_crs id="UTM">')
@@ -44,14 +44,12 @@ def escrever_omap(proj, caminho):
     add('</geographic_crs>')
     add('</georeferencing>')
 
-    # --- Cores ------------------------------------------------------------
     add('<colors count="1">')
     add('<color priority="0" name=%s c="%s" m="%s" y="%s" k="%s" opacity="1">'
         '<cmyk method="custom"/></color>'
         % (quoteattr(proj.cor_nome), _num(c), _num(m), _num(y), _num(k)))
     add('</colors>')
 
-    # --- Símbolo de curva -------------------------------------------------
     add('<symbols count="1" id="OrIFSC">')
     add('<symbol type="2" id="0" code="%d" name="Curva de nível">'
         '<line_symbol color="0" line_width="%d" minimum_length="0" '
@@ -64,7 +62,6 @@ def escrever_omap(proj, caminho):
         % (proj.codigo_simbolo, proj.largura_um))
     add('</symbols>')
 
-    # --- Objetos (curvas) -------------------------------------------------
     add('<parts count="1" current="0">')
     add('<part name="Curvas de nível"><objects count="%d">'
         % len(proj.linhas_mm))
@@ -74,7 +71,6 @@ def escrever_omap(proj, caminho):
     add('</objects></part>')
     add('</parts>')
 
-    # --- Satélite como mapa de fundo georreferenciado ---------------------
     if proj.satelite:
         nome = escape(os.path.basename(proj.satelite['path']))
         add('<templates count="1" first_front_template="1">')

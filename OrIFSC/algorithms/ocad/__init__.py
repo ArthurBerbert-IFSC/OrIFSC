@@ -16,5 +16,11 @@ OpenOrienteering Mapper (GPLv3): `src/fileformats/ocd_types*.h`,
 from .projeto import ProjetoOcad
 from .omap import escrever_omap
 from .ocd import escrever_ocd_v10
+from .simbologia import (
+    NORMA_ISOM, NORMA_ISSPROM, arquivo_simbologia, classificar_curvas,
+    escrever_omap_com_simbologia,
+)
 
-__all__ = ['ProjetoOcad', 'escrever_omap', 'escrever_ocd_v10']
+__all__ = ['ProjetoOcad', 'escrever_omap', 'escrever_ocd_v10',
+           'NORMA_ISOM', 'NORMA_ISSPROM', 'arquivo_simbologia',
+           'classificar_curvas', 'escrever_omap_com_simbologia']
