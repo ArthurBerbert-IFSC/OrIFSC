@@ -292,14 +292,26 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         # Recorte com geometria "preparada" (índice GEOS): a interseção por
         # curva fica ordens de grandeza mais rápida que geom.intersection().
         motor_recorte = None
+        motor_prefiltro = None
+        geom_prefiltro = None  # referência viva enquanto o motor existir
         if geom_recorte is not None and not geom_recorte.isEmpty():
             motor_recorte = QgsGeometry.createGeometryEngine(
                 geom_recorte.constGet())
             motor_recorte.prepareGeometry()
+            # Pré-filtro: pula curvas totalmente fora da área ANTES do
+            # Chaikin (a etapa cara). A área é expandida em 2x a tolerância
+            # porque o desvio da suavização é limitado por ~tol — garante
+            # resultado final idêntico ao de suavizar tudo e recortar depois.
+            geom_prefiltro = geom_recorte.buffer(2 * tol, 8)
+            if geom_prefiltro is not None and not geom_prefiltro.isEmpty():
+                motor_prefiltro = QgsGeometry.createGeometryEngine(
+                    geom_prefiltro.constGet())
+                motor_prefiltro.prepareGeometry()
 
         total = max(1, camada_brutas.featureCount())
         passo_log = max(1, total // 20)
         gravadas = 0
+        puladas = 0
         tem_elev = 'ELEV' in [c.name() for c in camada_brutas.fields()]
         for i, feat in enumerate(camada_brutas.getFeatures()):
             if feedback.isCanceled():
@@ -309,7 +321,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             if i and i % passo_log == 0:
                 feedback.pushInfo(
                     f'  suavizando: {i}/{total} curvas '
-                    f'({gravadas} linhas gravadas)')
+                    f'({gravadas} gravadas, {puladas} fora da área)')
             g = feat.geometry()
             if g is None or g.isEmpty():
                 continue
@@ -324,6 +336,10 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             # resolução do SIG@SC.
             g = g.simplify(tol)
             if g is None or g.isEmpty():
+                continue
+            if (motor_prefiltro is not None
+                    and not motor_prefiltro.intersects(g.constGet())):
+                puladas += 1
                 continue
             elev = feat['ELEV'] if tem_elev else None
             for parte in g.parts():
@@ -349,6 +365,10 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
                 gravadas += self._gravar(sink, campos, geom_s, elev)
 
         feedback.pushInfo(f'{gravadas} linha(s) gravadas na camada de saída.')
+        if puladas:
+            feedback.pushInfo(
+                f'{puladas} curva(s) fora da área de recorte foram puladas '
+                'antes da suavização (sem efeito no resultado).')
         feedback.setProgress(99)
         # Libera o sink AQUI, antes de o QGIS carregar a camada de saída no
         # projeto: buffer/handle ainda abertos nesse momento podem derrubar o
@@ -472,21 +492,24 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             tile_files.append(destino)
         podar_cache()
 
-        if len(tile_files) > 1:
-            # VRT (mosaico virtual): instantâneo — o gdal:contour lê janelado
-            # por cima dos tiles, sem reescrever o MDT inteiro em disco.
-            feedback.pushInfo('Combinando tiles (mosaico virtual)...')
-            from osgeo import gdal
-            mdt_vrt = QgsProcessingUtils.generateTempFilename(
-                'orifsc_mdt.vrt')
-            vrt = gdal.BuildVRT(mdt_vrt, tile_files)
-            if vrt is None:
-                raise QgsProcessingException(
-                    'Falha ao combinar os tiles do MDT (BuildVRT).')
-            vrt.FlushCache()
-            vrt = None
-            return mdt_vrt
-        return tile_files[0]
+        # VRT (mosaico virtual) SEMPRE, recortado na janela da folha via
+        # outputBounds: o gdal:contour vetoriza só a área de interesse. Sem
+        # o recorte, o contour rodava sobre o(s) tile(s) de 1°x1° inteiro(s)
+        # (~111 km de lado) e >99% das curvas nasciam fora da folha, eram
+        # suavizadas à toa e descartadas no recorte final ("0 gravadas").
+        feedback.pushInfo('Recortando o MDT na janela da folha (VRT)...')
+        from osgeo import gdal
+        mdt_vrt = QgsProcessingUtils.generateTempFilename(
+            'orifsc_mdt.vrt')
+        vrt = gdal.BuildVRT(mdt_vrt, tile_files, outputBounds=(
+            ext.xMinimum() - margem, ext.yMinimum() - margem,
+            ext.xMaximum() + margem, ext.yMaximum() + margem))
+        if vrt is None:
+            raise QgsProcessingException(
+                'Falha ao montar o mosaico recortado do MDT (BuildVRT).')
+        vrt.FlushCache()
+        vrt = None
+        return mdt_vrt
 
     def _baixar_mdt_sc(self, extent: Any, crs: Any, feedback: Any) -> str:
         """Baixa o MDT de SC pelo WCS do SIG@SC, recortado na folha, como GeoTIFF

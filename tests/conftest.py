@@ -44,3 +44,9 @@ def ocd():
 @pytest.fixture(scope='session')
 def omap():
     return carregar_modulo('orifsc_omap', 'algorithms', 'ocad', 'omap.py')
+
+
+@pytest.fixture(scope='session')
+def simbologia():
+    return carregar_modulo('orifsc_simbologia',
+                           'algorithms', 'ocad', 'simbologia.py')

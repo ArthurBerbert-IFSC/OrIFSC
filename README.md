@@ -24,8 +24,8 @@ Exportar: Exporte a base final diretamente para OCAD ou OOM e comece a desenhar.
 
 [x] Geração de curvas de nível a partir do MDT do SIG@SC (WCS, alta resolução).
 [x] Importação de arquivos GPX e KML.
-[ ] Inclusão automática de simbologia completa na exportação (ligação com arquivos de referência .crt).
+[x] Inclusão automática de simbologia completa na exportação (ISOM 2017-2 / ISSprOM 2019-2, symbol sets oficiais do OpenOrienteering Mapper embutidos).
 
 📝 Créditos e Licença
 Autor: Arthur Berbert (@arthurberbert-ifsc)
-Licença: GNU GPLv2 (Consulte o arquivo LICENSE).
+Licença: GNU GPLv3 (Consulte o arquivo LICENSE). Os escritores de exportação .ocd/.omap são portes do OpenOrienteering Mapper (GPLv3) e os conjuntos de símbolos embutidos vêm do mesmo projeto (ver OrIFSC/recursos/simbologias/PROVENIENCIA.txt).

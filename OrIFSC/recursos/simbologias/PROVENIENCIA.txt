@@ -1,0 +1,49 @@
+Simbologias oficiais embutidas no OrIFSC
+========================================
+
+Origem: symbol sets do OpenOrienteering Mapper (OOM), licença GPLv3.
+Repositório: https://github.com/OpenOrienteering/mapper
+Versão (tag): v0.9.6
+
+Arquivos .omap (copiados sem modificação):
+
+  ISOM_2017-2_15000.omap
+    <- "symbol sets/15000/ISOM 2017-2_15000.omap"
+    ISOM 2017-2 (floresta), escala-base 1:15.000.
+
+  ISOM_2017-2_10000.omap
+    <- "symbol sets/10000/ISOM 2017-2_10000.omap"
+    ISOM 2017-2 com símbolos ampliados em 150% (norma para 1:10.000).
+
+  ISSprOM_2019_4000.omap
+    <- "symbol sets/4000/ISSprOM 2019_4000.omap"
+    ISSprOM (sprint), escala-base 1:4.000. MODIFICADO pelo OrIFSC
+    (jul/2026, via tools/atualizar_issprom_2019_2.py) para refletir a
+    ISSprOM 2019-2 Revisão 6 (IOF, jan/2024), que o upstream ainda não
+    incorporou:
+      - novas cores "Dark green" (CMYK 100-0-80-30, linhas e áreas),
+        conforme "IOF Map Specifications — Printing and Colour
+        Definitions" (IOF Map Commission, jan/2022);
+      - 410 -> 411 "Uncrossable vegetation" (área dark green) e
+        410.1 -> 411.1 (linha/hedge dark green);
+      - novo 410 "Vegetation: fight" (área green 100%);
+      - novo 533 "Area with obstacles" (pontos Ø 0,55 mm, espaçamento
+        0,75 mm CC, 45°, preto 50%).
+    As modificações são permitidas pela GPLv3 e derivam da
+    especificação aberta da IOF, não de arquivos do OCAD.
+
+Arquivos .ocd (doadores de simbologia para o OCAD 10):
+
+  Gerados UMA vez a partir dos .omap acima, abrindo cada um no
+  OpenOrienteering Mapper e exportando como OCD (Arquivo > Exportar
+  como... > OCD). O conteúdo permanece derivado dos symbol sets do
+  OOM e portanto GPLv3. Arquivos de simbologia do OCAD NÃO podem ser
+  redistribuídos e não são usados aqui.
+
+Uso no plugin: na exportação, o OrIFSC injeta nesses arquivos a
+georreferência do projeto, as curvas de nível (símbolos 101/102) e o
+template do satélite — os símbolos em si não são alterados.
+
+Ao atualizar para uma nova versão do OOM, baixar novamente os três
+.omap da tag correspondente, regenerar os .ocd doadores e atualizar
+este arquivo.

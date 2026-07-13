@@ -45,7 +45,8 @@ class ProjetoOcad:
             folha_rect: Tuple[float, float, float, float],
             declinacao: float,
             linhas_mundo: Iterable[Iterable[Tuple[float, float]]],
-            satelite: Optional[dict] = None) -> None:
+            satelite: Optional[dict] = None,
+            codigos_linhas: Optional[Iterable[str]] = None) -> None:
         """Pré-processa dados cartográficos para escrita em OMAP/OCD.
 
         Args:
@@ -55,6 +56,9 @@ class ProjetoOcad:
             declinacao: Declinação magnética em graus.
             linhas_mundo: Curvas em coordenadas UTM.
             satelite: Metadados opcionais do GeoTIFF de fundo.
+            codigos_linhas: Código de símbolo por curva ('101'/'102'),
+                alinhado com ``linhas_mundo``; ``None`` = tudo curva
+                normal.
 
         O cálculo de grivação e da transformação usa a mesma convenção do
         OpenOrienteering Mapper para manter equivalência geométrica entre saída
@@ -93,10 +97,21 @@ class ProjetoOcad:
         self.largura_um = LARGURA_CURVA_UM
         self.codigo_simbolo = CODIGO_SIMBOLO
 
-        self.linhas_mm = [
-            [self.mapa_mm(e, n) for (e, n) in linha]
-            for linha in linhas_mundo if len(linha) >= 2
-        ]
+        linhas = list(linhas_mundo)
+        codigos = list(codigos_linhas) if codigos_linhas is not None else None
+        if codigos is not None and len(codigos) != len(linhas):
+            raise ValueError('codigos_linhas não alinhado com linhas_mundo '
+                             '(%d != %d).' % (len(codigos), len(linhas)))
+        # Filtra linhas degeneradas mantendo os códigos em sincronia.
+        self.linhas_mm = []
+        self.codigos_linhas = []
+        for i, linha in enumerate(linhas):
+            if len(linha) < 2:
+                continue
+            self.linhas_mm.append(
+                [self.mapa_mm(e, n) for (e, n) in linha])
+            self.codigos_linhas.append(
+                codigos[i] if codigos else str(CODIGO_SIMBOLO))
 
         self.satelite = self._preparar_satelite(satelite)
 

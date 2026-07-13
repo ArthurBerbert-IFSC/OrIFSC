@@ -124,3 +124,134 @@ def test_linha_vazia_gera_arquivo_valido(ocd, tmp_path):
     b = open(caminho, 'rb').read()
     assert struct.unpack_from('<H', b, 0)[0] == 0x0CAD
     assert _objetos(b) == []
+
+
+# --- Doador de simbologia (paleta completa injetada no .ocd) ---------------
+
+
+def _doador_bytes(ocd, codigos=(101, 102), versao=9, com_objetos=True):
+    """Doador sintético: paleta com os símbolos dados, objetos de exemplo
+    e strings próprias (cor 9, georreferência 1039, template 8) — o mesmo
+    que um export OCD do symbol set do OOM traz."""
+    from types import SimpleNamespace
+    w = ocd._OcdWriter()
+    w.add_string(9, 'Marrom\tn0\tc0\tm56\ty100\tk18\to1\tt100')
+    w.add_string(1039, '\tm15000\tg50.0\tr1\tx0\ty0\ta0\td500\ti2001')
+    w.add_string(8, 'exemplo.tif\ts1\tx0\ty0')
+    for codigo in codigos:
+        proj = SimpleNamespace(codigo_simbolo=codigo, largura_um=140)
+        w.add_symbol(ocd._simbolo_linha_bytes(proj))
+    if com_objetos:
+        for linha in ([(0.0, 0.0), (5.0, 5.0)], [(1.0, 1.0), (2.0, 0.0)]):
+            dados, bounds = ocd._objeto_bytes(linha, codigos[0] * 1000)
+            w.add_object(dados, bounds, codigos[0] * 1000, 2, 0)
+    struct.pack_into('<H', w.ba, 4, versao)
+    return bytes(w.ba)
+
+
+def _salvar_doador(ocd, tmp_path, **kwargs):
+    caminho = str(tmp_path / 'doador.ocd')
+    with open(caminho, 'wb') as f:
+        f.write(_doador_bytes(ocd, **kwargs))
+    return caminho
+
+
+def _strings(b):
+    """Lista (tipo, texto) das strings referenciadas pelo índice."""
+    resultado = []
+    bloco = _u32(b, 32)
+    while bloco:
+        for i in range(256):
+            epos = bloco + 4 + i * _STR_ENTRY
+            pos = _u32(b, epos)
+            if pos == 0:
+                continue
+            tam = _u32(b, epos + 4)
+            tipo = struct.unpack_from('<i', b, epos + 8)[0]
+            resultado.append((tipo, b[pos:pos + tam].rstrip(b'\x00')
+                              .decode('latin-1')))
+        bloco = _u32(b, bloco)
+    return resultado
+
+
+def test_doador_rejeita_lixo_e_versao_incompativel(ocd):
+    import pytest
+    with pytest.raises(ValueError):
+        ocd._OcdWriter.de_doador(b'\x00' * 64)
+    with pytest.raises(ValueError):
+        ocd._OcdWriter.de_doador(_doador_bytes(ocd, versao=8))
+
+
+def test_doador_v9_sai_como_v10(ocd, tmp_path):
+    doador = _salvar_doador(ocd, tmp_path, versao=9)
+    caminho = str(tmp_path / 'projeto.ocd')
+    ocd.escrever_ocd_v10(_projeto_falso([[(0.0, 0.0), (1.0, 1.0)]]),
+                         caminho, doador=doador)
+    b = open(caminho, 'rb').read()
+    assert struct.unpack_from('<H', b, 4)[0] == 10
+    # O arquivo doador em disco permanece intacto (v9).
+    assert struct.unpack_from('<H', open(doador, 'rb').read(), 4)[0] == 9
+
+
+def test_doador_remove_exemplos_e_grava_curvas_101_e_102(ocd, tmp_path):
+    doador = _salvar_doador(ocd, tmp_path)
+    linhas = [[(0.0, 0.0), (10.0, 5.0)], [(1.0, 1.0), (2.0, 2.0)]]
+    proj = _projeto_falso(linhas)
+    proj.codigos_linhas = ['101', '102']
+    caminho = str(tmp_path / 'projeto.ocd')
+    ocd.escrever_ocd_v10(proj, caminho, doador=doador)
+    b = open(caminho, 'rb').read()
+    posicoes = _objetos(b)
+    assert len(posicoes) == 2  # só as curvas; exemplos do doador removidos
+    numeros = [struct.unpack_from('<i', b, pos)[0] for pos in posicoes]
+    assert numeros == [101 * 1000, 102 * 1000]
+
+
+def test_doador_preserva_simbolos_e_cor_substitui_georreferencia(
+        ocd, tmp_path):
+    doador = _salvar_doador(ocd, tmp_path)
+    caminho = str(tmp_path / 'projeto.ocd')
+    ocd.escrever_ocd_v10(_projeto_falso([[(0.0, 0.0), (1.0, 1.0)]]),
+                         caminho, doador=doador)
+    b = open(caminho, 'rb').read()
+    w = ocd._OcdWriter.de_doador(b)
+    assert sorted(w.numeros_de_simbolos()) == [101000, 102000]
+    strings = _strings(b)
+    tipos = [t for (t, _) in strings]
+    assert tipos.count(9) == 1     # cor do doador preservada
+    assert tipos.count(1039) == 1  # georreferência única: a do projeto
+    assert 8 not in tipos          # template do doador descartado
+    georref = [txt for (t, txt) in strings if t == 1039][0]
+    assert '\tm10000\t' in georref  # escala do projeto, não a do doador
+
+
+def test_doador_template_do_satelite(ocd, tmp_path):
+    doador = _salvar_doador(ocd, tmp_path)
+    sat = {'path': 'satelite_orifsc.tif', 'centro_mm': (1.5, -2.5),
+           'u_mm': 0.03, 'v_mm': 0.03}
+    caminho = str(tmp_path / 'projeto.ocd')
+    ocd.escrever_ocd_v10(
+        _projeto_falso([[(0.0, 0.0), (1.0, 1.0)]], satelite=sat),
+        caminho, doador=doador)
+    strings = _strings(open(caminho, 'rb').read())
+    templates = [txt for (t, txt) in strings if t == 8]
+    assert len(templates) == 1
+    assert templates[0].startswith('satelite_orifsc.tif')
+
+
+def test_doador_sem_101_falha_sem_102_degrada(ocd, tmp_path):
+    import pytest
+    caminho = str(tmp_path / 'projeto.ocd')
+
+    doador = _salvar_doador(ocd, tmp_path, codigos=(103,))
+    with pytest.raises(ValueError):
+        ocd.escrever_ocd_v10(_projeto_falso([[(0.0, 0.0), (1.0, 1.0)]]),
+                             caminho, doador=doador)
+
+    doador = _salvar_doador(ocd, tmp_path, codigos=(101,))
+    proj = _projeto_falso([[(0.0, 0.0), (1.0, 1.0)]])
+    proj.codigos_linhas = ['102']
+    ocd.escrever_ocd_v10(proj, caminho, doador=doador)
+    b = open(caminho, 'rb').read()
+    numeros = [struct.unpack_from('<i', b, pos)[0] for pos in _objetos(b)]
+    assert numeros == [101 * 1000]  # mestra degrada para a curva normal

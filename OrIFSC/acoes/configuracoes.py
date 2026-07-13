@@ -19,12 +19,19 @@ PREFIXO = 'OrIFSC/'
 
 FOLHAS = ['A3', 'A4', 'A5']
 ORIENTACOES = ['Paisagem', 'Retrato']
+SIMBOLOGIAS = [
+    'Automática (pela escala do projeto)',
+    'ISOM 2017-2 (floresta)',
+    'ISSprOM 2019-2 (sprint)',
+    'Nenhuma (só curvas)',
+]
 
 PADROES = {
     'escala_padrao': 10000,
     'folha_padrao': 'A4',
     'orientacao_padrao': 'Paisagem',
     'equidistancia_padrao': 5,
+    'simbologia_padrao': SIMBOLOGIAS[0],
     'pasta_saida': '',
 }
 
@@ -87,6 +94,40 @@ def ler_orientacao_padrao() -> str:
     return str(_get('orientacao_padrao'))
 
 
+def ler_simbologia_padrao() -> str:
+    """Retorna a simbologia padrão da exportação (rótulo de ``SIMBOLOGIAS``).
+
+    Returns:
+        str: Uma das opções de ``SIMBOLOGIAS``.
+    """
+    valor = str(_get('simbologia_padrao'))
+    return valor if valor in SIMBOLOGIAS else SIMBOLOGIAS[0]
+
+
+def indice_simbologia_padrao() -> int:
+    """Índice padrão para o parâmetro Simbologia da exportação.
+
+    Returns:
+        int: 0 = ISOM, 1 = ISSprOM, 2 = Nenhuma (ordem do diálogo de
+        exportação).
+
+    Quando a preferência é 'Automática', sugere pela escala do projeto
+    atual: sprints (denominador <= 5.000) usam ISSprOM; o resto, ISOM.
+    """
+    pref = ler_simbologia_padrao()
+    if pref == SIMBOLOGIAS[1]:
+        return 0
+    if pref == SIMBOLOGIAS[2]:
+        return 1
+    if pref == SIMBOLOGIAS[3]:
+        return 2
+    from .comum import ler_escala
+    escala = ler_escala()
+    if escala and int(escala) <= 5000:
+        return 1
+    return 0
+
+
 def ler_pasta_saida() -> str:
     """Retorna pasta padrão de saída para exportação.
 
@@ -134,6 +175,10 @@ class DialogConfiguracoes(QDialog):
         self.equi_spin.setSuffix(' m')
         form.addRow('Equidistância padrão:', self.equi_spin)
 
+        self.simb_combo = QComboBox()
+        self.simb_combo.addItems(SIMBOLOGIAS)
+        form.addRow('Simbologia da exportação:', self.simb_combo)
+
         pasta_box = QHBoxLayout()
         self.pasta_edit = QLineEdit()
         btn_pasta = QPushButton('…')
@@ -176,6 +221,8 @@ class DialogConfiguracoes(QDialog):
         ori = ler_orientacao_padrao()
         if ori in ORIENTACOES:
             self.orientacao_combo.setCurrentIndex(ORIENTACOES.index(ori))
+        self.simb_combo.setCurrentIndex(
+            SIMBOLOGIAS.index(ler_simbologia_padrao()))
         self.pasta_edit.setText(ler_pasta_saida())
 
     def _salvar(self) -> None:
@@ -188,5 +235,7 @@ class DialogConfiguracoes(QDialog):
             self.orientacao_combo.currentText())
         s.setValue(PREFIXO + 'equidistancia_padrao',
                    int(self.equi_spin.value()))
+        s.setValue(PREFIXO + 'simbologia_padrao',
+                   self.simb_combo.currentText())
         s.setValue(PREFIXO + 'pasta_saida', self.pasta_edit.text())
         self.accept()

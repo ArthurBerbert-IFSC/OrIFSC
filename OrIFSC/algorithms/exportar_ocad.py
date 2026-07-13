@@ -29,6 +29,13 @@ MAX_PX = 16384
 TILE_URL = 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
 UA = 'Mozilla/5.0 (QGIS OrIFSC plugin)'
 
+# Índices casados com a ordem de _norma_da_opcao e com initAlgorithm.
+OPCOES_SIMBOLOGIA = [
+    'ISOM 2017-2 — floresta (1:15.000 / 1:10.000)',
+    'ISSprOM 2019-2 — sprint (1:4.000 / 1:3.000)',
+    'Nenhuma (só o símbolo de curva)',
+]
+
 
 def _resolucao(zoom: int) -> float:
     """Metros por pixel (em EPSG:3857) no nível de zoom dado."""
@@ -42,6 +49,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
     EXPORTAR_SATELITE = 'EXPORTAR_SATELITE'
     QUALIDADE = 'QUALIDADE'
     CURVAS = 'CURVAS'
+    SIMBOLOGIA = 'SIMBOLOGIA'
     DECL_AUTO = 'DECL_AUTO'
     DECL_MANUAL = 'DECL_MANUAL'
     FORMATO = 'FORMATO'
@@ -154,6 +162,11 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         self.addParameter(QgsProcessingParameterVectorLayer(
             self.CURVAS, 'Camada de Curvas de Nível (vira objeto no projeto)',
             [Qgis.ProcessingSourceType.VectorLine], optional=True))
+        self.addParameter(QgsProcessingParameterEnum(
+            self.SIMBOLOGIA,
+            'Simbologia (paleta de símbolos da norma, pronta para desenhar)',
+            options=OPCOES_SIMBOLOGIA,
+            defaultValue=self._simbologia_padrao()))
         self.addParameter(QgsProcessingParameterBoolean(
             self.DECL_AUTO, 'Calcular declinação magnética automaticamente (WMM/NOAA)',
             defaultValue=True))
@@ -187,7 +200,11 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         fluxo previsível e evitar trabalho pesado desnecessário quando a pasta,
         a folha ou o CRS não atendem aos pré-requisitos do plugin.
         """
-        from .ocad import ProjetoOcad, escrever_omap, escrever_ocd_v10
+        from .ocad import (
+            NORMA_ISOM, NORMA_ISSPROM, ProjetoOcad, arquivo_simbologia,
+            classificar_curvas, escrever_ocd_v10, escrever_omap,
+            escrever_omap_com_simbologia,
+        )
         from .ocad.geo import declinacao_noaa
         from .ocad.projeto import centro_latlon
 
@@ -204,6 +221,10 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         if curvas is not None and not curvas.isValid():
             feedback.pushWarning('A camada de curvas selecionada está inválida.')
             raise QgsProcessingException('Camada de curvas inválida.')
+
+        indice_simb = self.parameterAsEnum(
+            parameters, self.SIMBOLOGIA, context)
+        norma = (NORMA_ISOM, NORMA_ISSPROM, None)[indice_simb]
 
         decl_auto = self.parameterAsBool(parameters, self.DECL_AUTO, context)
         decl_manual = self.parameterAsDouble(
@@ -248,11 +269,25 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                 'travar com imagens grandes; abra-o manualmente se quiser vê-lo).')
         feedback.setProgress(60)
 
-        linhas = []
+        linhas, elevacoes = [], []
         if curvas is not None:
             feedback.pushInfo('Lendo curvas de nível...')
-            linhas = self._curvas_para_linhas(curvas, crs)
+            linhas, elevacoes = self._curvas_para_linhas(curvas, crs)
             feedback.pushInfo(f'{len(linhas)} curva(s) lida(s).')
+
+        codigos = None
+        if norma is not None and linhas:
+            codigos = classificar_curvas(elevacoes)
+            mestras = codigos.count('102')
+            if mestras:
+                feedback.pushInfo(
+                    f'{mestras} curva(s) mestra(s) (símbolo 102, a cada 5ª '
+                    'equidistância pelo campo ELEV).')
+            else:
+                feedback.pushWarning(
+                    'Nenhuma curva mestra identificada (campo ELEV ausente '
+                    'ou elevações insuficientes): todas sairão como curva '
+                    'normal (101).')
         feedback.setProgress(70)
 
         declinacao = decl_manual
@@ -271,21 +306,45 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         feedback.pushInfo(f'Declinação usada: {declinacao:.2f}°.')
         feedback.setProgress(80)
 
-        proj = ProjetoOcad(escala, epsg, rect, declinacao, linhas, satelite)
+        proj = ProjetoOcad(escala, epsg, rect, declinacao, linhas, satelite,
+                           codigos_linhas=codigos)
         feedback.pushInfo(f'Convergência meridiana: {proj.convergencia:.2f}° | '
                           f'grivação (norte magnético): {proj.grivacao:.2f}°.')
+        if norma is not None:
+            feedback.pushInfo('Simbologia: %s.'
+                              % OPCOES_SIMBOLOGIA[indice_simb])
 
         resultado = {}
         if fazer_ocad:
             ocd = os.path.join(pasta, 'projeto_orifsc.ocd')
             feedback.pushInfo('Gerando projeto OCAD 10 (.ocd)...')
-            escrever_ocd_v10(proj, ocd)
+            doador = (arquivo_simbologia(norma, escala, '.ocd')
+                      if norma is not None else None)
+            if doador is not None and not os.path.exists(doador):
+                feedback.pushWarning(
+                    'Simbologia para .ocd ainda não disponível (falta o '
+                    f'arquivo {os.path.basename(doador)} no plugin); o .ocd '
+                    'sai só com o símbolo de curva. O .omap sai completo.')
+                doador = None
+            try:
+                escrever_ocd_v10(proj, ocd, doador=doador)
+            except ValueError as exc:
+                if doador is None:
+                    raise
+                feedback.pushWarning(
+                    f'Simbologia .ocd descartada ({exc}); gerando só com o '
+                    'símbolo de curva.')
+                escrever_ocd_v10(proj, ocd)
             resultado['OCD'] = ocd
         if fazer_omap:
             omap = os.path.join(pasta, 'projeto_orifsc.omap')
             feedback.pushInfo(
                 'Gerando projeto OpenOrienteering Mapper (.omap)...')
-            escrever_omap(proj, omap)
+            if norma is None:
+                escrever_omap(proj, omap)
+            else:
+                escrever_omap_com_simbologia(
+                    proj, omap, arquivo_simbologia(norma, escala))
             resultado['OMAP'] = omap
         feedback.setProgress(100)
 
@@ -330,25 +389,44 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                 'Escala não definida. Rode antes "Definir Local e Criar Folha".')
         return escala
 
+    def _simbologia_padrao(self) -> int:
+        """Índice padrão do parâmetro Simbologia (preferência global; se
+        'Automática', sugerido pela escala do projeto). Nunca falha: o
+        diálogo precisa abrir mesmo sem projeto configurado."""
+        try:
+            from ..acoes.configuracoes import indice_simbologia_padrao
+            return indice_simbologia_padrao()
+        except Exception:
+            return 0
+
     def _curvas_para_linhas(
             self,
             layer: Any,
-            crs_destino: QgsCoordinateReferenceSystem) -> list:
+            crs_destino: QgsCoordinateReferenceSystem) -> Tuple[list, list]:
         """Lê as feições de linha reprojetadas para o CRS da folha como listas
-        de (x, y). Itera vértices por parte (robusto a multipartes e curvas)."""
+        de (x, y), com a elevação (campo ELEV, ou None) alinhada por linha.
+        Itera vértices por parte (robusto a multipartes e curvas)."""
         ct = QgsCoordinateTransform(
             layer.crs(), crs_destino, QgsProject.instance())
-        linhas = []
+        idx_elev = layer.fields().indexOf('ELEV')
+        linhas, elevacoes = [], []
         for feat in layer.getFeatures():
             geom = feat.geometry()
             if geom is None or geom.isEmpty():
                 continue
             geom.transform(ct)
+            elev = None
+            if idx_elev >= 0:
+                try:
+                    elev = float(feat.attribute(idx_elev))
+                except (TypeError, ValueError):
+                    elev = None
             for parte in geom.parts():
                 pts = [(v.x(), v.y()) for v in parte.vertices()]
                 if len(pts) >= 2:
                     linhas.append(pts)
-        return linhas
+                    elevacoes.append(elev)
+        return linhas, elevacoes
 
     def _geotransform(self, tif: str) -> Dict[str, Any]:
         """Lê origem/pixel/tamanho do GeoTIFF para posicionar o fundo no OCD."""
