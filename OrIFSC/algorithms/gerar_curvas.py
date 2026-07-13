@@ -2,21 +2,17 @@
 
 import os
 import math
-import xml.etree.ElementTree as ET
-from urllib.parse import quote
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Optional, Set, Tuple
 
 import numpy as np
 from qgis.core import (
     Qgis,
     QgsProcessingAlgorithm, QgsProcessingParameterFeatureSource,
     QgsProcessingParameterNumber, QgsProcessingParameterFeatureSink,
-    QgsProcessingParameterEnum,
     QgsProcessingException, QgsProcessingUtils,
     QgsCoordinateReferenceSystem, QgsCoordinateTransform,
     QgsVectorLayer, QgsFields, QgsField, QgsFeature, QgsFeatureSink,
     QgsGeometry, QgsLineString, QgsPointXY,
-    QgsProject, QgsRectangle,
 )
 from qgis.PyQt.QtCore import QMetaType
 import processing
@@ -39,10 +35,9 @@ def _equidistancia_padrao() -> int:
 
 
 class GerarCurvasNivel(QgsProcessingAlgorithm):
-    """Gera curvas de nível a partir de Copernicus ou WCS do SIG@SC."""
+    """Gera curvas de nível a partir do MDT Copernicus 30 m."""
 
     LIMITE = 'LIMITE'
-    FONTE_MDT = 'FONTE_MDT'
     EQUIDISTANCIA = 'EQUIDISTANCIA'
     RECORTE = 'RECORTE'
     OUTPUT_CURVAS = 'OUTPUT_CURVAS'
@@ -133,11 +128,6 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         self.addParameter(QgsProcessingParameterFeatureSource(
             self.LIMITE, 'Camada da área a mapear (define a extensão do MDT)',
             [Qgis.ProcessingSourceType.VectorPolygon]))
-        self.addParameter(QgsProcessingParameterEnum(
-            self.FONTE_MDT, 'Fonte do MDT',
-            options=['Copernicus 30 m (global, gratuito)',
-                     'SIG@SC — MDT de SC (WCS, alta resolução; só SC)'],
-            defaultValue=0))
         self.addParameter(QgsProcessingParameterNumber(
             self.EQUIDISTANCIA, 'Equidistância (metros)',
             type=Qgis.ProcessingNumberParameterType.Integer,
@@ -185,31 +175,15 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
                 'A camada de recorte selecionada está inválida.')
             raise QgsProcessingException('Camada de recorte inválida.')
 
-        fonte = self.parameterAsEnum(parameters, self.FONTE_MDT, context)
-        if fonte == 1:
-            feedback.pushInfo('Fonte selecionada: SIG@SC (sem fallback automatico).')
-            try:
-                mdt_temp = self._baixar_mdt_sc(
-                    camada_limite.sourceExtent(), camada_limite.sourceCrs(),
-                    feedback)
-            except QgsProcessingException:
-                raise
-            except Exception as e:
-                raise QgsProcessingException(
-                    'Falha ao obter MDT da fonte selecionada (SIG@SC). '
-                    'Nenhuma outra fonte foi usada automaticamente.\n'
-                    f'Erro: {e}')
-        else:
-            feedback.pushInfo('Fonte selecionada: Copernicus 30 m (sem fallback automatico).')
-            try:
-                mdt_temp = self._baixar_copernicus(camada_limite, context, feedback)
-            except QgsProcessingException:
-                raise
-            except Exception as e:
-                raise QgsProcessingException(
-                    'Falha ao obter MDT da fonte selecionada (Copernicus). '
-                    'Nenhuma outra fonte foi usada automaticamente.\n'
-                    f'Erro: {e}')
+        feedback.pushInfo('Fonte do MDT: Copernicus 30 m.')
+        try:
+            mdt_temp = self._baixar_copernicus(camada_limite, context, feedback)
+        except QgsProcessingException:
+            raise
+        except Exception as e:
+            raise QgsProcessingException(
+                'Falha ao obter o MDT Copernicus.\n'
+                f'Erro: {e}')
 
         if not mdt_temp or not os.path.exists(mdt_temp):
             raise QgsProcessingException(
@@ -332,8 +306,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
                 continue
             # Remove vértices abaixo da resolução de desenho ANTES do Chaikin:
             # corta memória/tempo (o Chaikin ×2 quadruplica os vértices) sem
-            # efeito visível na escala do mapa. Essencial no MDT de alta
-            # resolução do SIG@SC.
+            # efeito visível na escala do mapa.
             g = g.simplify(tol)
             if g is None or g.isEmpty():
                 continue
@@ -510,304 +483,6 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         vrt.FlushCache()
         vrt = None
         return mdt_vrt
-
-    def _baixar_mdt_sc(self, extent: Any, crs: Any, feedback: Any) -> str:
-        """Baixa o MDT de SC pelo WCS do SIG@SC, recortado na folha, como GeoTIFF
-        de elevacao (valores reais, nao imagem) para curvas de alta resolucao.
-
-        Roda na thread do algoritmo (nao trava o QGIS). Descobre a coverage do
-        MDT por GetCapabilities (XML) e baixa via GetCoverage WCS 1.0.0,
-        evitando erros do driver WCS do GDAL em alguns ambientes.
-        """
-        from osgeo import gdal
-        gdal.UseExceptions()
-        gdal.SetConfigOption('GDAL_HTTP_TIMEOUT', '120')
-        gdal.SetConfigOption('GDAL_HTTP_CONNECTTIMEOUT', '30')
-        url = 'http://sigsc.sc.gov.br/sigserver/ows'
-
-        feedback.pushInfo('Consultando o WCS do SIG@SC (pode demorar)...')
-        coverage = None
-        versao_ok = None
-        coberturas_lidas = []
-        for ver in ('1.0.0', '2.0.1', '1.1.1'):
-            if feedback.isCanceled():
-                return None
-            try:
-                caps_url = (f'{url}?service=WCS&request=GetCapabilities'
-                            f'&version={ver}')
-                xml_caps = baixar_bytes(caps_url)
-                coberturas = self._extrair_coberturas_wcs(xml_caps)
-                if coberturas:
-                    coberturas_lidas = coberturas
-                alvo = self._selecionar_cobertura_mdt(coberturas)
-                if alvo is not None:
-                    coverage = alvo['id']
-                    versao_ok = ver
-                    rotulo = alvo.get('title') or alvo['id']
-                    feedback.pushInfo(
-                        f'Coverage do MDT encontrada (WCS {ver}): {rotulo}')
-                if coverage:
-                    break
-            except Exception as e:
-                feedback.pushInfo(f'WCS {ver} nao respondeu ({e}).')
-        if not coverage:
-            if coberturas_lidas:
-                amostra = ', '.join([c['id'] for c in coberturas_lidas[:6]])
-                feedback.pushInfo(f'Coberturas encontradas no servico: {amostra}')
-            raise QgsProcessingException(
-                'Nao localizei o MDT no WCS do SIG@SC (servico fora do ar/lento, '
-                'ou a camada mudou de nome). Nenhuma outra fonte foi usada '
-                'automaticamente.')
-
-        marg = 50.0
-        bbox = [extent.xMinimum() - marg, extent.yMinimum() - marg,
-                extent.xMaximum() + marg, extent.yMaximum() + marg]
-        destino = QgsProcessingUtils.generateTempFilename('orifsc_mdt_sc.tif')
-
-        feedback.pushInfo('Baixando o recorte do MDT de SC (alta resolucao)...')
-        if versao_ok != '1.0.0':
-            raise QgsProcessingException(
-                'O SIG@SC respondeu com WCS em versao nao suportada por este '
-                'fluxo de download direto. Tente novamente mais tarde.')
-
-        try:
-            self._baixar_getcoverage_wcs_100(
-                url=url,
-                coverage=coverage,
-                extent=bbox,
-                crs_origem=crs,
-                destino=destino,
-                feedback=feedback,
-            )
-        except Exception as e:
-            raise QgsProcessingException(
-                'Falha ao baixar o MDT de SC pelo WCS do SIG@SC.\n'
-                f'Erro: {e}')
-
-        ds_out = gdal.Open(destino)
-        if ds_out is None:
-            if feedback.isCanceled():
-                raise QgsProcessingException('Operacao cancelada.')
-            raise QgsProcessingException(
-                'Falha ao baixar o MDT de SC pelo WCS do SIG@SC.')
-        ds_out.FlushCache()
-        ds_out = None
-        return destino
-
-    def _baixar_getcoverage_wcs_100(
-            self,
-            url: str,
-            coverage: str,
-            extent: Sequence[float],
-            crs_origem: Any,
-            destino: str,
-            feedback: Any) -> None:
-        """Baixa cobertura via WCS 1.0.0 (GetCoverage) em GeoTIFF."""
-        from osgeo import gdal
-
-        crs_req = crs_origem.authid() if crs_origem is not None else 'EPSG:4326'
-        if not crs_req:
-            crs_req = 'EPSG:4326'
-
-        try:
-            desc_url = (f'{url}?service=WCS&request=DescribeCoverage&version=1.0.0'
-                        f'&coverage={quote(coverage, safe=":_")}')
-            desc = baixar_bytes(desc_url)
-            crs_desc = self._extrair_crs_wcs_100(desc)
-            if crs_req not in crs_desc and crs_desc:
-                crs_req = crs_desc[0]
-        except Exception:
-            pass
-
-        bbox_req = self._transformar_bbox(extent, crs_origem.authid(), crs_req)
-        largura, altura = self._dimensoes_bbox(bbox_req)
-
-        gc_url = (
-            f'{url}?service=WCS&request=GetCoverage&version=1.0.0'
-            f'&coverage={quote(coverage, safe=":_")}'
-            f'&crs={quote(crs_req, safe=":")}'
-            f'&bbox={bbox_req[0]},{bbox_req[1]},{bbox_req[2]},{bbox_req[3]}'
-            f'&width={largura}&height={altura}'
-            '&format=GeoTIFF'
-        )
-        dados = baixar_bytes(gc_url)
-        if not dados or len(dados) < 1024:
-            raise RuntimeError('Resposta do GetCoverage vazia ou invalida.')
-
-        with open(destino, 'wb') as f:
-            f.write(dados)
-
-        ds = gdal.Open(destino)
-        if ds is None or ds.RasterCount < 1:
-            raise RuntimeError('GetCoverage nao retornou um GeoTIFF de elevacao valido.')
-        ds = None
-        feedback.setProgress(40)
-
-    @staticmethod
-    def _extrair_crs_wcs_100(xml_desc: bytes) -> List[str]:
-        """Extrai CRSs disponiveis do DescribeCoverage (WCS 1.0.0)."""
-        root = ET.fromstring(xml_desc)
-        crss = []
-        for el in root.iter():
-            nome = el.tag.split('}', 1)[-1].lower() if el.tag else ''
-            if nome in ('requestresponsecrss', 'requestcrss',
-                        'responsecrss', 'nativecrss'):
-                txt = (el.text or '').strip()
-                if txt:
-                    crss.append(txt)
-        unicos = []
-        vistos = set()
-        for c in crss:
-            if c in vistos:
-                continue
-            vistos.add(c)
-            unicos.append(c)
-        return unicos
-
-    @staticmethod
-    def _transformar_bbox(
-            bbox: Sequence[float],
-            src_authid: str,
-            dst_authid: str) -> Sequence[float]:
-        """Transforma bbox [minx,miny,maxx,maxy] entre dois CRS."""
-        if not src_authid or not dst_authid or src_authid == dst_authid:
-            return bbox
-
-        src = QgsCoordinateReferenceSystem(src_authid)
-        dst = QgsCoordinateReferenceSystem(dst_authid)
-        if not src.isValid() or not dst.isValid():
-            return bbox
-
-        ct = QgsCoordinateTransform(src, dst, QgsProject.instance())
-        qext = QgsRectangle(bbox[0], bbox[1], bbox[2], bbox[3])
-        t = ct.transformBoundingBox(qext)
-        return [t.xMinimum(), t.yMinimum(), t.xMaximum(), t.yMaximum()]
-
-    @staticmethod
-    def _dimensoes_bbox(
-            bbox: Sequence[float],
-            alvo: int = 2048,
-            maximo: int = 4096,
-            minimo: int = 256) -> Tuple[int, int]:
-        """Calcula width/height com base no aspecto do bbox."""
-        dx = max(1e-9, abs(bbox[2] - bbox[0]))
-        dy = max(1e-9, abs(bbox[3] - bbox[1]))
-        asp = dx / dy
-        if asp >= 1.0:
-            w = max(minimo, min(maximo, int(alvo)))
-            h = max(minimo, min(maximo, int(round(w / asp))))
-        else:
-            h = max(minimo, min(maximo, int(alvo)))
-            w = max(minimo, min(maximo, int(round(h * asp))))
-        return w, h
-
-    @staticmethod
-    def _extrair_coberturas_wcs(xml_caps: bytes) -> List[Dict[str, str]]:
-        """Extrai lista de coberturas do GetCapabilities WCS (1.x/2.x)."""
-        root = ET.fromstring(xml_caps)
-        itens = []
-
-        def _local(tag: str) -> str:
-            """Normaliza tag XML removendo namespace.
-
-            Args:
-                tag: Nome bruto da tag.
-
-            Returns:
-                str: Nome local em minúsculas.
-            """
-            return tag.split('}', 1)[-1].lower() if tag else ''
-
-        def _texto(el: Any) -> str:
-            """Extrai texto limpo de elemento XML.
-
-            Args:
-                el: Elemento XML opcional.
-
-            Returns:
-                str: Texto sem espaços extras.
-            """
-            if el is None or el.text is None:
-                return ''
-            return el.text.strip()
-
-        for cov in root.findall('.//{*}CoverageSummary'):
-            cid = ''
-            titulo = ''
-            for ch in list(cov):
-                nome = _local(ch.tag)
-                if nome in ('coverageid', 'coverageidentifier', 'identifier'):
-                    cid = _texto(ch)
-                elif nome in ('title', 'label', 'abstract') and not titulo:
-                    titulo = _texto(ch)
-            if cid:
-                itens.append({'id': cid, 'title': titulo})
-
-        for cov in root.findall('.//{*}CoverageOfferingBrief'):
-            cid = ''
-            titulo = ''
-            for ch in list(cov):
-                nome = _local(ch.tag)
-                if nome in ('name', 'identifier'):
-                    cid = _texto(ch)
-                elif nome in ('label', 'title', 'description', 'abstract') and not titulo:
-                    titulo = _texto(ch)
-            if cid:
-                itens.append({'id': cid, 'title': titulo})
-
-        if not itens:
-            for el in root.iter():
-                nome = _local(el.tag)
-                if nome in ('coverageid', 'name'):
-                    txt = _texto(el)
-                    if txt:
-                        itens.append({'id': txt, 'title': ''})
-
-        unicos = []
-        vistos = set()
-        for it in itens:
-            cid = it['id']
-            if cid in vistos:
-                continue
-            vistos.add(cid)
-            unicos.append(it)
-        return unicos
-
-    @staticmethod
-    def _selecionar_cobertura_mdt(
-            coberturas: Sequence[Dict[str, str]]) -> Optional[Dict[str, str]]:
-        """Seleciona cobertura candidata de MDT por score de palavras-chave."""
-        if not coberturas:
-            return None
-
-        palavras = (
-            ('modelo digital de terreno', 10),
-            ('mdt', 8),
-            ('dem', 7),
-            ('terreno', 5),
-            ('elev', 4),
-            ('relevo', 3),
-        )
-
-        melhor = None
-        melhor_score = -1
-        for c in coberturas:
-            txt = ((c.get('id') or '') + ' ' + (c.get('title') or '')).lower()
-            score = 0
-            for p, w in palavras:
-                if p in txt:
-                    score += w
-
-            if any(p in txt for p in (
-                'imagepyramid', 'generated from imagepyramid',
-                'hillshade', 'sombra', 'render', 'rgb', 'orto', 'ortofoto',
-            )):
-                score -= 20
-
-            if score > melhor_score:
-                melhor_score = score
-                melhor = c
-        return melhor if melhor_score > 0 else None
 
     @staticmethod
     def _cache_valido(caminho: str) -> bool:

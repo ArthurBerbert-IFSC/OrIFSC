@@ -274,7 +274,7 @@ class OrIFSCPlugin:
         """Executa o fluxo guiado de dados públicos do SIG@SC.
         """
         from .acoes.dados_publicos_sc import adicionar_sigsc
-        adicionar_sigsc(self.iface, self.iface)
+        adicionar_sigsc(self.iface, self.iface.mainWindow())
 
     def _abrir_sigsc(self) -> None:
         """Abre o portal SIG@SC no navegador padrão.
