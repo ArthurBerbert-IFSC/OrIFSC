@@ -271,7 +271,8 @@ INSTRUCOES = {
             '(a folha ou o limite).',
         ])
         + _esp()
-        + _dica('Deixe <b>Recortar por</b> em branco para gerar sem recorte.')
+        + _dica('Deixe <b>Recortar por</b> em branco para recortar pela '
+                'própria área a mapear (não precisa selecioná-la de novo).')
     ),
     'importar_kml_gpx': (
         _secao('O que faz')
@@ -294,7 +295,10 @@ INSTRUCOES = {
             '<b>Georreferência</b> (UTM, escala e grade) e <b>declinação '
             'magnética</b> (automática via WMM/NOAA, ou manual).',
             'O <b>satélite</b> como mapa de fundo georreferenciado.',
-            'As <b>curvas de nível</b> já como objetos de linha.',
+            'As <b>curvas de nível</b> já como objetos de linha '
+            '(mestras no símbolo 102 a cada 5ª equidistância).',
+            'A <b>paleta de símbolos oficial</b> (ISOM 2017-2 ou '
+            'ISSprOM 2019-2) pronta para desenhar.',
         ])
         + _esp()
         + _dica('Posicione a folha e salve as edições antes de gerar. Mantenha '

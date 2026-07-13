@@ -13,11 +13,13 @@ bits à esquerda (os 8 bits baixos guardam flags de vértice, aqui sempre 0).
 import math
 import os
 import struct
-from typing import Any, Iterable, Tuple
+from typing import Any, Iterable, List, Optional, Tuple
 
 VENDOR = 0x0CAD
 VERSION = 10
 FATOR_SIMBOLO = 1000
+CODIGO_CURVA = 101
+CODIGO_CURVA_MESTRA = 102
 
 _STR_ENTRY = 16
 _SYM_ENTRY = 4
@@ -98,6 +100,78 @@ class _OcdWriter:
         struct.pack_into('<I', self.ba, 8, self.first_symbol)
         struct.pack_into('<I', self.ba, 12, self.first_object)
         struct.pack_into('<I', self.ba, 32, self.first_string)
+
+    @classmethod
+    def de_doador(cls, dados: bytes) -> '_OcdWriter':
+        """Inicializa o montador a partir de um .ocd doador de simbologia.
+
+        Args:
+            dados: Bytes completos do arquivo doador (OCD v9 ou v10).
+
+        Returns:
+            _OcdWriter: Montador pronto para receber strings e objetos.
+
+        O doador contém apenas a paleta (símbolos + cores) exportada do
+        symbol set do OOM; v9 e v10 são estruturalmente idênticos, então a
+        versão do cabeçalho é normalizada para 10 (abre direto no OCAD 10
+        sem pedido de conversão). Versões != 9/10 têm layout diferente e
+        são rejeitadas.
+        """
+        w = cls.__new__(cls)
+        w.ba = bytearray(dados)
+        if len(w.ba) < 48 or struct.unpack_from('<H', w.ba, 0)[0] != VENDOR:
+            raise ValueError('Doador não é um arquivo OCD válido.')
+        versao = struct.unpack_from('<H', w.ba, 4)[0]
+        if versao not in (9, 10):
+            raise ValueError('Doador OCD na versão %d; exporte o symbol set '
+                             'como OCD versão 9 ou 10.' % versao)
+        struct.pack_into('<H', w.ba, 4, VERSION)
+        w.first_symbol = _u32(w.ba, 8)
+        w.first_object = _u32(w.ba, 12)
+        w.first_string = _u32(w.ba, 32)
+        for off in (w.first_symbol, w.first_object, w.first_string):
+            if not 0 < off < len(w.ba):
+                raise ValueError('Doador OCD com índices corrompidos.')
+        return w
+
+    def _blocos(self, first_block: int) -> Iterable[int]:
+        """Percorre a cadeia de blocos de um índice."""
+        bloco = first_block
+        while bloco:
+            yield bloco
+            bloco = _u32(self.ba, bloco)
+
+    def zerar_objetos(self) -> None:
+        """Zera todas as entradas do índice de objetos (remove os objetos
+        de exemplo que o symbol set traz; os bytes das entidades ficam
+        órfãos no arquivo, o que o formato permite)."""
+        for bloco in self._blocos(self.first_object):
+            base = bloco + 4
+            self.ba[base:base + 256 * _OBJ_ENTRY] = (
+                b'\x00' * (256 * _OBJ_ENTRY))
+
+    def zerar_strings(self, tipos: Tuple[int, ...]) -> None:
+        """Zera as entradas de string dos tipos dados (ex.: 1039 do doador,
+        que será substituída pela georreferência do projeto)."""
+        for bloco in self._blocos(self.first_string):
+            for i in range(256):
+                epos = bloco + 4 + i * _STR_ENTRY
+                if _u32(self.ba, epos) == 0:
+                    continue
+                tipo = struct.unpack_from('<i', self.ba, epos + 8)[0]
+                if tipo in tipos:
+                    self.ba[epos:epos + _STR_ENTRY] = b'\x00' * _STR_ENTRY
+
+    def numeros_de_simbolos(self) -> List[int]:
+        """Números (código x 1000 + sufixo) dos símbolos presentes."""
+        numeros = []
+        for bloco in self._blocos(self.first_symbol):
+            for i in range(256):
+                pos = _u32(self.ba, bloco + 4 + i * _SYM_ENTRY)
+                if pos:
+                    numeros.append(
+                        struct.unpack_from('<i', self.ba, pos + 4)[0])
+        return numeros
 
     def _insert(
             self,
@@ -199,10 +273,9 @@ def _simbolo_linha_bytes(proj: Any) -> bytes:
 
 
 def _objeto_bytes(
-        proj: Any,
-        linha: Iterable[Tuple[float, float]]) -> Tuple[bytes, Tuple[int, int, int, int], int]:
+        linha: Iterable[Tuple[float, float]],
+        numero: int) -> Tuple[bytes, Tuple[int, int, int, int]]:
     """Objeto de linha (ObjectV9) com as coordenadas da curva."""
-    numero = proj.codigo_simbolo * FATOR_SIMBOLO
     coords = bytearray()
     xs, ys = [], []
     for (mx, my) in linha:
@@ -216,26 +289,65 @@ def _objeto_bytes(
                         0, 0, 0, 0, 0, 0, 0)
     dados = cabec + bytes(coords)
     bounds = (min(xs), min(ys), max(xs), max(ys))
-    return dados, bounds, numero
+    return dados, bounds
 
 
-def escrever_ocd_v10(proj: Any, caminho: str) -> str:
-    """Gera o .ocd (OCAD 10) em `caminho` a partir de um ProjetoOcad."""
-    w = _OcdWriter()
+def _numeros_por_codigo(w: '_OcdWriter') -> Tuple[int, int]:
+    """Números dos símbolos de curva (101) e curva mestra (102) do doador.
 
-    c, m, y, k = proj.cor
-    w.add_string(9, '%s\tn0\tc%d\tm%d\ty%d\tk%d\to1\tt100' % (
-        proj.cor_nome, round(c * 100), round(m * 100),
-        round(y * 100), round(k * 100)))
+    Sem o 101 o doador não serve (é a base das curvas exportadas); sem o
+    102 as mestras degradam para o 101.
+    """
+    numeros = set(w.numeros_de_simbolos())
+    numero_curva = CODIGO_CURVA * FATOR_SIMBOLO
+    if numero_curva not in numeros:
+        raise ValueError('Doador de simbologia sem o símbolo 101 '
+                         '(curva de nível).')
+    numero_mestra = CODIGO_CURVA_MESTRA * FATOR_SIMBOLO
+    if numero_mestra not in numeros:
+        numero_mestra = numero_curva
+    return numero_curva, numero_mestra
+
+
+def escrever_ocd_v10(proj: Any, caminho: str,
+                     doador: Optional[str] = None) -> str:
+    """Gera o .ocd (OCAD 10) em `caminho` a partir de um ProjetoOcad.
+
+    Args:
+        proj: Projeto com georreferência, curvas e satélite.
+        caminho: Arquivo .ocd de saída.
+        doador: Caminho opcional de um .ocd só-simbologia (ver
+            ``recursos/simbologias/``). Quando presente, o arquivo sai com
+            a paleta completa da norma e as curvas apontam para os
+            símbolos reais 101/102; sem doador, mantém o comportamento
+            original (símbolo único de curva criado do zero).
+    """
+    if doador is None:
+        w = _OcdWriter()
+        c, m, y, k = proj.cor
+        w.add_string(9, '%s\tn0\tc%d\tm%d\ty%d\tk%d\to1\tt100' % (
+            proj.cor_nome, round(c * 100), round(m * 100),
+            round(y * 100), round(k * 100)))
+        w.add_symbol(_simbolo_linha_bytes(proj))
+        numero_curva = numero_mestra = proj.codigo_simbolo * FATOR_SIMBOLO
+    else:
+        with open(doador, 'rb') as f:
+            w = _OcdWriter.de_doador(f.read())
+        w.zerar_objetos()
+        w.zerar_strings((8, 1039))
+        numero_curva, numero_mestra = _numeros_por_codigo(w)
 
     w.add_string(1039, '\tm%d\tg%.4f\tr1\tx%d\ty%d\ta%.8f\td%.6f\ti%d' % (
         proj.escala, 50.0, round(proj.ref_e), round(proj.ref_n),
         proj.grivacao, 500.0, proj.i_grade))
 
-    w.add_symbol(_simbolo_linha_bytes(proj))
-
-    for linha in proj.linhas_mm:
-        dados, bounds, numero = _objeto_bytes(proj, linha)
+    codigos = getattr(proj, 'codigos_linhas', None)
+    if not codigos:
+        codigos = ['%d' % CODIGO_CURVA] * len(proj.linhas_mm)
+    for linha, codigo in zip(proj.linhas_mm, codigos):
+        numero = (numero_mestra if codigo == '%d' % CODIGO_CURVA_MESTRA
+                  else numero_curva)
+        dados, bounds = _objeto_bytes(linha, numero)
         w.add_object(dados, bounds, numero, 2, 0)
 
     if proj.satelite:

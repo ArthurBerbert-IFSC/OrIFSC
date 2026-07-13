@@ -19,7 +19,9 @@
 - **Núcleo de exportação OCAD/OOM** (`OrIFSC\algorithms\ocad\*.py`):
   - modelo comum (`projeto.py`);
   - cálculos geográficos (`geo.py`);
-  - escritores de arquivo (`ocd.py`, `omap.py`).
+  - escritores de arquivo (`ocd.py`, `omap.py`);
+  - simbologia oficial embutida (`simbologia.py`): injeção do projeto nos
+    symbol sets do OOM (`recursos/simbologias/`) — módulo puro, sem QGIS.
 - **Rede** (`OrIFSC\rede.py`):
   - `baixar_bytes`: requisições unitárias via rede do QGIS.
   - `baixar_varios`: download paralelo HTTP para mosaicos de tiles.
@@ -47,6 +49,11 @@
    - Nunca aplicar tolerância numérica sobre geometria em CRS geográfico (graus). Causa histórica: `simplify(0.2)` aplicado sobre curvas em EPSG:4326 equivalia a ~22 km de tolerância e colapsava as curvas em "triângulos/retângulos" (bug corrigido em `gerar_curvas.py`).
 9. **Fontes de MDT suportadas**
    - Copernicus 30 m (global) e SIG@SC via WCS (Santa Catarina). **FABDEM foi removido do escopo** (decisão de julho/2026); não reintroduzir placeholders "em breve" no menu ou nas configurações.
+10. **Simbologia embutida por injeção, nunca do zero**
+   - Os projetos exportados com simbologia partem dos **symbol sets oficiais do OOM** (GPLv3) versionados em `OrIFSC/recursos/simbologias/` (ver `PROVENIENCIA.txt`): o plugin **injeta** neles a georreferência, as curvas (símbolos 101/102, localizados por código — nunca por id/posição fixa) e o template do satélite. Não gerar paletas de símbolos programaticamente.
+   - Para o `.ocd`, a paleta vem de um **arquivo doador OCD v9/v10** gerado uma única vez exportando o symbol set no próprio OOM (v9 é normalizado para v10 no cabeçalho). **Arquivos de simbologia do OCAD não podem ser redistribuídos** — o doador tem que derivar do OOM. Se o doador não existir, a exportação degrada com aviso para o símbolo único (nunca falha por isso).
+   - Curvas mestras: elevação (ELEV) múltipla de 5x a equidistância → símbolo 102; a equidistância é **deduzida dos próprios dados** (menor diferença entre elevações distintas), sem depender de configuração.
+   - Ao atualizar os symbol sets para uma nova versão do OOM: baixar da tag correspondente, regenerar os doadores `.ocd` e atualizar `PROVENIENCIA.txt`.
 
 ## 3. Comunicação entre módulos
 
@@ -74,6 +81,7 @@
 - Laços por vértice em Python são proibidos para dados densos — vetorize com NumPy (ex.: `_chaikin` em `gerar_curvas.py`) e use `QgsGeometry.createGeometryEngine` + `prepareGeometry()` para interseções repetidas contra a mesma geometria.
 - Toda simplificação de geometria deve ser justificada em resolução de papel (mm na escala do projeto), nunca um número solto. **Critério cartográfico do projeto: o menor objeto visível no papel é 0,15 mm** (definição do autor, jul/2026). Desvios acumulados de todo o pipeline devem ficar abaixo disso; como as curvas passam por duas simplificações (antes e depois do Chaikin), cada passada usa 0,075 mm de papel, limitada a [0,1 m; 1,5 m] (`_tolerancia_simplificacao_m` em `gerar_curvas.py`).
 - Rasters grandes nunca inteiros na RAM: monte/escreva por faixas (streaming) direto num dataset GDAL (`_montar_mosaico_tif` em `exportar_ocad.py`). Combine tiles de MDT com `gdal.BuildVRT` (mosaico virtual), não com `gdal:merge`.
+- Vetorize rasters só na janela de interesse: recorte por bbox (`BuildVRT` com `outputBounds`) antes de `gdal:contour` e afins — nunca vetorizar o tile inteiro (1°×1° do Copernicus ≈ 111 km; sem recorte, >99% das curvas nasciam fora da folha). Antes de operações caras por feição (ex.: Chaikin), aplique um pré-filtro espacial barato (`intersects` com geometria preparada), com folga que cubra o desvio da operação (buffer de 2× a tolerância em `gerar_curvas.py`).
 - Caches persistentes (tiles de MDT/satélite) em `QgsApplication.qgisSettingsDirPath()/cache/orifsc`, com validação de integridade (tamanho mínimo) e re-download automático de arquivos corrompidos.
 - Reutilize `acoes/comum.py` e `acoes/configuracoes.py` para qualquer novo estado.
 - Documente decisões técnicas importantes em docstrings (não em comentários longos soltos).
@@ -86,6 +94,7 @@
 - Não criar novas rotas de rede que aceitem esquemas além de `http/https`.
 - Não duplicar lógica de validação de projeto já existente em `acoes/comum.py`.
 - Não usar enums Qt/QGIS na forma não-escopada (ex.: `QMessageBox.Cancel`, `Qgis.Warning`) — quebra no QGIS 4/PyQt6.
+- Não redistribuir arquivos de simbologia do OCAD nem gerar doadores `.ocd` a partir deles — a origem tem que ser os symbol sets GPLv3 do OOM (regra de negócio 10).
 - Não alterar as creation options do GeoTIFF **final** do satélite (RGB, LZW, `TILED=NO`, `BIGTIFF=NO`) — requisito do OCAD 10.
 - Não reintroduzir FABDEM nem itens de menu/configuração desabilitados como placeholder.
 - Não expandir o uso de tiles do Google para novas funcionalidades (ver seção 6).
