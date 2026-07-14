@@ -54,7 +54,15 @@ def _listar_camadas_wms(url_wms: str) -> List[Tuple[str, str]]:
     """Retorna [(name, title), ...] a partir do GetCapabilities do WMS."""
     cap_url = (f'{url_wms}?service=WMS&request=GetCapabilities')
     conteudo = baixar_bytes(cap_url, user_agent='OrIFSC')
-    root = ET.fromstring(conteudo)
+    # Defesa contra XML malicioso: o GetCapabilities vem da rede, então
+    # recusamos DOCTYPE/ENTITY (um GetCapabilities legítimo não os declara).
+    # Isso elimina XXE e "billion laughs" antes do parse; o expat do
+    # ElementTree, além disso, não resolve entidades externas.
+    if conteudo and (b'<!DOCTYPE' in conteudo or b'<!ENTITY' in conteudo):
+        raise RuntimeError(
+            'GetCapabilities do SIG@SC contém DOCTYPE/ENTITY — recusado '
+            'por segurança.')
+    root = ET.fromstring(conteudo)  # nosec B314 - guard acima recusa DOCTYPE/ENTITY
     camadas = []
     for el in root.iter():
         if not el.tag.lower().endswith('layer'):

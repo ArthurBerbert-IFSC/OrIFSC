@@ -162,7 +162,10 @@ def escrever_omap_com_simbologia(proj: Any, caminho: str,
     são removidos; símbolos, cores e vista permanecem como no original.
     """
     ET.register_namespace('', NS_URI)
-    arvore = ET.parse(arquivo_base)
+    # arquivo_base é um symbol set embutido no próprio plugin (confiável,
+    # distribuído no pacote) — não é entrada de rede/usuário, sem superfície
+    # de XXE.
+    arvore = ET.parse(arquivo_base)  # nosec B314 - arquivo confiável do pacote
     raiz = arvore.getroot()
 
     antiga = raiz.find(f'{NS}georeferencing')
