@@ -28,19 +28,19 @@ def abrir_gerenciador_wms(iface: Any, parent: Any = None) -> bool:
         if hasattr(iface, 'openDataSourceManagerPage'):
             iface.openDataSourceManagerPage('wms')
             return True
-    except Exception:
+    except Exception:  # nosec B110 - fallback: tenta a próxima API do QGIS
         pass
 
     try:
         iface.openDataSourceManager('wms')
         return True
-    except Exception:
+    except Exception:  # nosec B110 - fallback: tenta a próxima API do QGIS
         pass
 
     try:
         iface.openDataSourceManager()
         return True
-    except Exception:
+    except Exception:  # nosec B110 - fallback: tenta a próxima API do QGIS
         pass
 
     try:
@@ -49,7 +49,7 @@ def abrir_gerenciador_wms(iface: Any, parent: Any = None) -> bool:
         if acao is not None:
             acao.trigger()
             return True
-    except Exception:
+    except Exception:  # nosec B110 - fallback: tenta a próxima API do QGIS
         pass
 
     try:

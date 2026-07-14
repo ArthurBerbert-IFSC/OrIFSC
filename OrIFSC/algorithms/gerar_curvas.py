@@ -236,7 +236,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
                 gg = QgsGeometry(gg)
                 try:
                     gg.transform(ct_rec)
-                except Exception:
+                except Exception:  # nosec B112 - geometria intransformável é ignorada
                     continue
                 partes_rec.append(gg)
             if partes_rec:
@@ -302,7 +302,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             g = QgsGeometry(g)
             try:
                 g.transform(ct_curvas)
-            except Exception:
+            except Exception:  # nosec B112 - geometria intransformável é ignorada
                 continue
             # Remove vértices abaixo da resolução de desenho ANTES do Chaikin:
             # corta memória/tempo (o Chaikin ×2 quadruplica os vértices) sem
@@ -330,7 +330,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
                     try:
                         recortada = motor_recorte.intersection(
                             geom_s.constGet())
-                    except Exception:
+                    except Exception:  # nosec B112 - falha no recorte: pula a geometria
                         continue
                     if recortada is None:
                         continue

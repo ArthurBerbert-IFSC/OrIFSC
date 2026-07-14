@@ -172,7 +172,7 @@ class DialogImportarKmlGpx(QDialog):
                     tr = QgsCoordinateTransform(crs_camada, crs_projeto,
                                                 QgsProject.instance())
                     ext_camada = tr.transformBoundingBox(ext_camada)
-                except Exception:
+                except Exception:  # nosec B110 - falha na transformação: usa o extent original
                     pass
             extent.combineExtentWith(ext_camada)
 

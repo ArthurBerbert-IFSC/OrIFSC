@@ -26,9 +26,11 @@ _SYM_ENTRY = 4
 _OBJ_ENTRY = 40
 _OBJ_POS_OFFSET = 16
 
-assert struct.calcsize('<HBBH BB' + 'I' * 10) == 48
-assert struct.calcsize('<iBBhIHBBIHHIIII') == 40
-assert struct.calcsize('<iiiiIIiBBBBHHHBB') == _OBJ_ENTRY
+# Sanidade dos formatos struct (roda sempre, inclusive em bytecode -O).
+if (struct.calcsize('<HBBH BB' + 'I' * 10) != 48
+        or struct.calcsize('<iBBhIHBBIHHIIII') != 40
+        or struct.calcsize('<iiiiIIiBBBBHHHBB') != _OBJ_ENTRY):
+    raise RuntimeError('Tamanhos de struct do OCD inesperados.')
 
 
 def _round_half_up(v: float) -> int:

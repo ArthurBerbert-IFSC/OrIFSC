@@ -9,7 +9,7 @@ Ortofoto via WMTS (tiles, mais rápido); MDT via WMS (imagem de fundo — atenç
 é uma imagem renderizada, não valores de elevação, então NÃO serve para gerar
 curvas; para curvas o plugin usa o MDT Copernicus).
 """
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 - parse endurecido (guard anti-DOCTYPE/ENTITY)
 from urllib.parse import quote
 from typing import Any, List, Optional, Sequence, Set, Tuple
 

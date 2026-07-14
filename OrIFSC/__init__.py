@@ -15,7 +15,7 @@ def _recarregar_modulos_dev() -> None:
         if mod.startswith('OrIFSC.') or mod.startswith('PluginQgis.'):
             try:
                 importlib.reload(sys.modules[mod])
-            except Exception:
+            except Exception:  # nosec B112 - reload de dev (ORIFSC_DEV), best-effort
                 continue
 
 

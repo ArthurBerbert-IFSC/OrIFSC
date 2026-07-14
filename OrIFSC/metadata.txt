@@ -4,7 +4,7 @@ qgisMinimumVersion=3.40
 qgisMaximumVersion=4.99
 description=Generate cartographic base maps for the sport of orienteering
 description[pt]=Gerador de bases cartográficas para mapas de orientação esportiva
-version=0.1.17
+version=0.1.18
 author= arthur berbert
 email=arthur@berbert.eng.br
 about=OrIFSC automates the production of cartographic base maps for the sport of orienteering. It is a partnership between IFSC (Instituto Federal de Santa Catarina) and the Florianópolis Orienteering Club (FLORA). The plugin loads a georeferenced satellite image, generates smoothed contour lines from free elevation data (Copernicus 30 m DEM) and exports a ready-to-open project for OCAD and OpenOrienteering Mapper, already set up with georeferencing, magnetic declination, the satellite backdrop and the contour lines as map objects.
@@ -19,8 +19,8 @@ icon=icons/icon.svg
 experimental=False
 deprecated=False
 changelog=
-    0.1.17
-    - Segurança: o parse do GetCapabilities do SIG@SC (XML vindo da rede) passa a recusar DOCTYPE/ENTITY antes de interpretar, eliminando vetores de XXE e "billion laughs"; o parse do symbol set embutido foi anotado como fonte confiável do próprio pacote. Desbloqueia a validação de segurança do repositório oficial (scanner Bandit) sem alterar o comportamento.
+    0.1.18
+    - Segurança: zerados todos os apontamentos do scanner Bandit do repositório oficial, que bloqueava a publicação. O parse de XML remoto do SIG@SC passa a recusar DOCTYPE/ENTITY antes de interpretar (bloqueia XXE e "billion laughs"); os demais apontamentos (parse de arquivos embutidos confiáveis, blocos try/except best-effort, imports de XML) foram anotados como seguros, e os asserts de validação de layout do OCD viraram checagem explícita com raise (passam a rodar também em bytecode otimizado). Sem mudança de comportamento.
     0.1.16
     - Curvas de nível: removida a opção "Fonte do MDT" que baixava o MDT de SC pelo WCS do SIG@SC — o serviço não respondia de forma confiável. A geração passa a usar apenas o Copernicus 30 m. O menu Dados Públicos → SIG@SC (camadas WMS/WMTS) continua disponível.
     - Correção: o menu Dados Públicos → Santa Catarina quebrava ao abrir (TypeError no QMessageBox por receber a interface do QGIS em vez da janela principal).

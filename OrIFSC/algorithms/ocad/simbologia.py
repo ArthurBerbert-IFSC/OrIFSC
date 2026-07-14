@@ -15,7 +15,7 @@ aplicativo; símbolos/partes/templates dos symbol sets vivem dentro dele.
 """
 import math
 import os
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 - symbol sets embutidos, confiáveis
 from typing import Any, Iterable, List, Optional, Sequence
 
 NS_URI = 'http://openorienteering.org/apps/mapper/xml/v2'

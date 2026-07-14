@@ -5,7 +5,7 @@ Estrutura e nomes de elementos portados do XML que o próprio OOM escreve
 Coordenadas de objeto em 1/1000 mm (nativo do OOM), y para baixo.
 """
 import os
-from xml.sax.saxutils import escape, quoteattr
+from xml.sax.saxutils import escape, quoteattr  # nosec B406 - só ESCAPA saída XML, não faz parse
 from typing import Any, Iterable, Tuple
 
 

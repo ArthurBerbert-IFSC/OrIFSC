@@ -96,7 +96,7 @@ def baixar_varios(
                 req = urllib.request.Request(url, headers=cabec)
                 with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # nosec B310
                     return resp.read()
-            except Exception:
+            except Exception:  # nosec B112 - re-tenta o download em qualquer falha
                 continue
         return None
 

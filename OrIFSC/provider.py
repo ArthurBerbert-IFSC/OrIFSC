@@ -18,7 +18,7 @@ class OrIFSCProvider(QgsProcessingProvider):
                         'OrIFSC.algorithms'):
                     try:
                         importlib.reload(sys.modules[mod_name])
-                    except Exception:
+                    except Exception:  # nosec B110 - reload de dev (ORIFSC_DEV), best-effort
                         pass
 
         from .algorithms.gerar_curvas import GerarCurvasNivel

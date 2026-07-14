@@ -50,6 +50,6 @@ def criar_limite(iface: Any, parent: Any = None) -> Optional[QgsVectorLayer]:
     limite.startEditing()
     try:
         iface.actionAddFeature().trigger()
-    except Exception:
+    except Exception:  # nosec B110 - ativar edição é best-effort
         pass
     return limite

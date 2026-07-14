@@ -141,7 +141,7 @@ class DialogDefinirLocal(QDialog):
             pt = QgsCoordinateTransform(
                 src, crs_wgs, QgsProject.instance()).transform(ext.center())
             self.coord_input.setText(f'{pt.y():.6f}, {pt.x():.6f}')
-        except Exception:
+        except Exception:  # nosec B110 - preencher coordenada é best-effort
             pass
 
     def _on_escala_changed(self, idx: int) -> None:
