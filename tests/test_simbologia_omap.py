@@ -204,3 +204,10 @@ def test_codigos_desalinhados_falham(simbologia, tmp_path):
             _projeto_falso([[(0.0, 0.0), (1.0, 1.0)]],
                            codigos_linhas=['101', '102']),
             str(tmp_path / 'projeto.omap'), base)
+
+
+def test_classificar_curvas_equidistancia_2_5(simbologia):
+    # Sprint com 2,5 m: mestra a cada 12,5 m (5 x 2,5).
+    elevs = [10.0, 12.5, 15.0, 17.5, 20.0, 22.5, 25.0, 27.5, 37.5]
+    assert simbologia.classificar_curvas(elevs) == [
+        '101', '102', '101', '101', '101', '101', '102', '101', '102']

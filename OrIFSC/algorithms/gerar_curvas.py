@@ -24,14 +24,22 @@ from .utils import dir_cache, ocultar_da_toolbox, podar_cache
 
 _TILE_MIN_BYTES = 1024
 
+EQUIDISTANCIA_MIN = 0.5
+EQUIDISTANCIA_MAX = 100.0
 
-def _equidistancia_padrao() -> int:
-    """Equidistância padrão definida em OrIFSC → Configurações (fallback 5 m)."""
+
+def _equidistancia_padrao() -> float:
+    """Equidistância padrão definida em OrIFSC → Configurações (fallback 5 m).
+
+    Aceita decimais (ex.: 2,5 m, comum em sprint) e fica limitada à faixa do
+    parâmetro para não invalidar o diálogo com um valor salvo fora dela.
+    """
     try:
         from qgis.core import QgsSettings
-        return int(QgsSettings().value('OrIFSC/equidistancia_padrao', 5))
+        valor = float(QgsSettings().value('OrIFSC/equidistancia_padrao', 5))
     except Exception:
-        return 5
+        return 5.0
+    return min(max(valor, EQUIDISTANCIA_MIN), EQUIDISTANCIA_MAX)
 
 
 class GerarCurvasNivel(QgsProcessingAlgorithm):
@@ -128,10 +136,13 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         self.addParameter(QgsProcessingParameterFeatureSource(
             self.LIMITE, 'Camada da área a mapear (define a extensão do MDT)',
             [Qgis.ProcessingSourceType.VectorPolygon]))
-        self.addParameter(QgsProcessingParameterNumber(
+        param_equi = QgsProcessingParameterNumber(
             self.EQUIDISTANCIA, 'Equidistância (metros)',
-            type=Qgis.ProcessingNumberParameterType.Integer,
-            defaultValue=_equidistancia_padrao()))
+            type=Qgis.ProcessingNumberParameterType.Double,
+            defaultValue=_equidistancia_padrao(),
+            minValue=EQUIDISTANCIA_MIN, maxValue=EQUIDISTANCIA_MAX)
+        param_equi.setMetadata({'widget_wrapper': {'decimals': 1}})
+        self.addParameter(param_equi)
         self.addParameter(QgsProcessingParameterFeatureSource(
             self.RECORTE, 'Recortar curvas por (camada — opcional: folha/limite)',
             [Qgis.ProcessingSourceType.VectorPolygon], optional=True))
@@ -161,7 +172,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             raise QgsProcessingException(
                 'Camada da área a mapear não informada.')
 
-        equidistancia = self.parameterAsInt(
+        equidistancia = self.parameterAsDouble(
             parameters, self.EQUIDISTANCIA, context)
         if equidistancia <= 0:
             feedback.pushWarning(

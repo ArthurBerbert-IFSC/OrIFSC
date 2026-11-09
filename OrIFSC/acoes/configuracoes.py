@@ -10,6 +10,7 @@ from typing import Any
 from qgis.core import QgsSettings
 from qgis.PyQt.QtWidgets import (
     QDialog, QFormLayout, QVBoxLayout, QHBoxLayout, QComboBox, QSpinBox,
+    QDoubleSpinBox,
     QLineEdit, QPushButton, QDialogButtonBox, QFileDialog,
 )
 
@@ -30,7 +31,7 @@ PADROES = {
     'escala_padrao': 10000,
     'folha_padrao': 'A4',
     'orientacao_padrao': 'Paisagem',
-    'equidistancia_padrao': 5,
+    'equidistancia_padrao': 5.0,
     'simbologia_padrao': SIMBOLOGIAS[0],
     'pasta_saida': '',
 }
@@ -64,14 +65,14 @@ def ler_escala_padrao() -> int:
         return PADROES['escala_padrao']
 
 
-def ler_equidistancia_padrao() -> int:
+def ler_equidistancia_padrao() -> float:
     """Retorna a equidistância padrão de curvas em metros.
 
     Returns:
-        int: Equidistância padrão.
+        float: Equidistância padrão (aceita decimais, ex.: 2,5 m em sprint).
     """
     try:
-        return int(_get('equidistancia_padrao'))
+        return float(_get('equidistancia_padrao'))
     except (TypeError, ValueError):
         return PADROES['equidistancia_padrao']
 
@@ -170,8 +171,10 @@ class DialogConfiguracoes(QDialog):
         self.orientacao_combo.addItems(ORIENTACOES)
         form.addRow('Orientação padrão:', self.orientacao_combo)
 
-        self.equi_spin = QSpinBox()
-        self.equi_spin.setRange(1, 100)
+        self.equi_spin = QDoubleSpinBox()
+        self.equi_spin.setDecimals(1)
+        self.equi_spin.setRange(0.5, 100.0)
+        self.equi_spin.setSingleStep(0.5)
         self.equi_spin.setSuffix(' m')
         form.addRow('Equidistância padrão:', self.equi_spin)
 
@@ -234,7 +237,7 @@ class DialogConfiguracoes(QDialog):
             PREFIXO + 'orientacao_padrao',
             self.orientacao_combo.currentText())
         s.setValue(PREFIXO + 'equidistancia_padrao',
-                   int(self.equi_spin.value()))
+                   float(self.equi_spin.value()))
         s.setValue(PREFIXO + 'simbologia_padrao',
                    self.simb_combo.currentText())
         s.setValue(PREFIXO + 'pasta_saida', self.pasta_edit.text())
