@@ -8,6 +8,12 @@ Exportação Direta: Projetos prontos para OCAD (.ocd) e OpenOrienteering Mapper
 Georreferenciamento Nativo: Os arquivos já saem na escala, rotação e coordenadas corretas (UTM).
 Declinação Magnética: Cálculo automático integrado.
 
+🌐 Idiomas / Languages / Diller
+O plugin está disponível em Português, English e Türkçe. Por padrão segue o idioma do QGIS (outros idiomas caem no inglês); para escolher manualmente, use o menu OrIFSC → Idioma / Language ou OrIFSC → Configurações.
+The plugin follows the QGIS language by default; pick another one under OrIFSC → Language.
+Eklenti varsayılan olarak QGIS dilini kullanır; başka bir dil seçmek için OrIFSC → Dil / Language menüsünü kullanın.
+Quer ajudar a traduzir ou revisar? Os textos ficam em OrIFSC/i18n/*.json (texto em português = chave); rode python tools/i18n_atualizar.py depois de mudar textos no código.
+
 📥 Instalação
 O OrIFSC já está disponível no repositório oficial do QGIS:
 Abra o QGIS (versão 3.40 ou superior; compatível com o QGIS 4).

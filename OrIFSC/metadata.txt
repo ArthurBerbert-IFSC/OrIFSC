@@ -4,21 +4,28 @@ qgisMinimumVersion=3.40
 qgisMaximumVersion=4.99
 description=Generate cartographic base maps for the sport of orienteering
 description[pt]=Gerador de bases cartográficas para mapas de orientação esportiva
-version=0.1.18
+description[tr]=Oryantiring sporu için kartografik altlık haritaları oluşturur
+version=0.1.19
 author= arthur berbert
 email=arthur@berbert.eng.br
 about=OrIFSC automates the production of cartographic base maps for the sport of orienteering. It is a partnership between IFSC (Instituto Federal de Santa Catarina) and the Florianópolis Orienteering Club (FLORA). The plugin loads a georeferenced satellite image, generates smoothed contour lines from free elevation data (Copernicus 30 m DEM) and exports a ready-to-open project for OCAD and OpenOrienteering Mapper, already set up with georeferencing, magnetic declination, the satellite backdrop and the contour lines as map objects.
 about[pt]=Plugin para geração automatizada de bases cartográficas para mapas de orientação esportiva, em parceria entre o IFSC e o Clube de Orientação de Florianópolis. Carrega imagem georreferenciada de satélite, gera curvas de nível suavizadas (MDT Copernicus 30 m) e exporta um projeto pronto para abrir no OCAD e no OpenOrienteering Mapper, já com georreferência, declinação magnética, o satélite como fundo e as curvas como objetos.
+about[tr]=OrIFSC, oryantiring sporu için kartografik altlık haritalarının üretimini otomatikleştirir. IFSC (Santa Catarina Federal Enstitüsü) ile Florianópolis Oryantiring Kulübü (FLORA) arasındaki bir iş birliğidir. Eklenti coğrafi referanslı bir uydu görüntüsü yükler, ücretsiz yükseklik verilerinden (Copernicus 30 m SYM) yumuşatılmış eş yükselti eğrileri oluşturur ve OCAD ile OpenOrienteering Mapper'da açılmaya hazır bir proje dışa aktarır; proje coğrafi referans, manyetik sapma, arka plan uydu görüntüsü ve harita nesnesi olarak eş yükselti eğrileriyle birlikte gelir. Arayüz dili: Português, English, Türkçe.
 tracker=https://github.com/arthurberbert-ifsc/orifsc/issues
 repository=https://github.com/arthurberbert-ifsc/orifsc
 hasProcessingProvider=yes
-tags=orienteering,orientacao,mapa,contour,curvas de nivel,orientismo,ocad
+tags=orienteering,orientacao,mapa,contour,curvas de nivel,orientismo,ocad,oryantiring
 homepage=https://github.com/arthurberbert-ifsc/orifsc
 category=Vector
 icon=icons/icon.svg
 experimental=False
 deprecated=False
 changelog=
+    0.1.19
+    - Idiomas: o plugin agora fala português, inglês e turco (Türkçe). Por padrão segue o idioma do QGIS (QGIS em outro idioma cai no inglês); dá para escolher manualmente no novo submenu OrIFSC → Idioma / Language ou em Configurações. A troca vale na hora: o menu é reconstruído traduzido e as janelas seguintes já abrem no novo idioma. Pedido da comunidade de orientação da Turquia.
+    - Tudo traduzido: menu, diálogos, painéis de ajuda, parâmetros e mensagens de progresso dos algoritmos, avisos e a janela Sobre (descrição em turco no metadata). Escalas formatadas com o separador de milhar do idioma (1:10.000 / 1:10,000).
+    - As camadas folha e limite ganham nome no idioma do plugin e passam a ser reconhecidas por uma propriedade interna (não mais pelo nome); a camada de curvas é reconhecida pelo campo ELEV. Projetos antigos continuam funcionando.
+    - Para tradutores: catálogos JSON em OrIFSC/i18n (texto em português = chave) e a ferramenta tools/i18n_atualizar.py para sincronizar com o código; testes automáticos garantem que inglês e turco estão completos e com placeholders e marcações HTML preservados.
     0.1.18
     - Segurança: zerados todos os apontamentos do scanner Bandit do repositório oficial, que bloqueava a publicação. O parse de XML remoto do SIG@SC passa a recusar DOCTYPE/ENTITY antes de interpretar (bloqueia XXE e "billion laughs"); os demais apontamentos (parse de arquivos embutidos confiáveis, blocos try/except best-effort, imports de XML) foram anotados como seguros, e os asserts de validação de layout do OCD viraram checagem explícita com raise (passam a rodar também em bytecode otimizado). Sem mudança de comportamento.
     0.1.16

@@ -20,6 +20,7 @@ from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.PyQt.QtCore import QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 
+from ..i18n import tr
 from .bases import abrir_gerenciador_wms
 from ..rede import baixar_bytes
 
@@ -31,6 +32,9 @@ URL_WMS = 'http://sigsc.sc.gov.br/sigserver/SIGSC/wms'
 URL_WMTS = 'http://sigsc.sc.gov.br/sigserver/gwc/service/wmts'
 PORTAL = 'https://sigsc.sc.gov.br/'
 
+# Nomes das conexões gravadas no QGIS: são identificadores (chave nas
+# configurações do QGIS), por isso NÃO são traduzidos — trocar o idioma do
+# plugin não pode duplicar as conexões.
 _CONEXOES = [
     ('SIG@SC Ortofoto (WMTS)', URL_WMTS),
     ('SIG@SC MDT (WMS)', URL_WMS),
@@ -60,8 +64,8 @@ def _listar_camadas_wms(url_wms: str) -> List[Tuple[str, str]]:
     # ElementTree, além disso, não resolve entidades externas.
     if conteudo and (b'<!DOCTYPE' in conteudo or b'<!ENTITY' in conteudo):
         raise RuntimeError(
-            'GetCapabilities do SIG@SC contém DOCTYPE/ENTITY — recusado '
-            'por segurança.')
+            tr('GetCapabilities do SIG@SC contém DOCTYPE/ENTITY — recusado '
+               'por segurança.'))
     root = ET.fromstring(conteudo)  # nosec B314 - guard acima recusa DOCTYPE/ENTITY
     camadas = []
     for el in root.iter():
@@ -123,8 +127,11 @@ def _adicionar_wms(
     uri = _uri_wms(url_wms, nome_camada)
     layer = QgsRasterLayer(uri, nome_exibicao, 'wms')
     if not layer.isValid():
-        erro = layer.error().message() if layer.error() else 'sem detalhes'
-        raise RuntimeError(f'QGIS nao conseguiu validar a camada WMS: {erro}')
+        erro = (layer.error().message() if layer.error()
+                else tr('sem detalhes'))
+        raise RuntimeError(
+            tr('O QGIS não conseguiu validar a camada WMS: {erro}',
+               erro=erro))
 
     proj = QgsProject.instance()
     proj.addMapLayer(layer, False)
@@ -143,15 +150,16 @@ def _dialogo_escolha(parent: Any = None) -> Optional[str]:
     msg = QMessageBox(parent)
     msg.setIcon(QMessageBox.Icon.Question)
     msg.setWindowTitle('SIG@SC')
-    msg.setText('O que você quer adicionar no mapa?')
+    msg.setText(tr('O que você quer adicionar no mapa?'))
     msg.setInformativeText(
-        'Escolha uma opção pronta. O plugin tenta carregar automaticamente.')
+        tr('Escolha uma opção pronta. O plugin tenta carregar '
+           'automaticamente.'))
 
-    b1 = msg.addButton('Ortofoto (recomendado)',
+    b1 = msg.addButton(tr('Ortofoto (recomendado)'),
                        QMessageBox.ButtonRole.ActionRole)
-    b2 = msg.addButton('MDT visual (sombra de relevo)',
+    b2 = msg.addButton(tr('MDT visual (sombra de relevo)'),
                        QMessageBox.ButtonRole.ActionRole)
-    b3 = msg.addButton('Modo avançado (abrir WMS/WMTS manual)',
+    b3 = msg.addButton(tr('Modo avançado (abrir WMS/WMTS manual)'),
                        QMessageBox.ButtonRole.HelpRole)
     msg.addButton(QMessageBox.StandardButton.Cancel)
     msg.exec()
@@ -181,26 +189,27 @@ def adicionar_sigsc(iface: Any, parent: Any = None) -> None:
         if not abriu:
             iface.messageBar().pushMessage(
                 'OrIFSC',
-                'Não foi possível abrir o gerenciador WMS/WMTS. Use o '
-                'menu de camadas do QGIS para adicionar o serviço manualmente.',
+                tr('Não foi possível abrir o gerenciador WMS/WMTS. Use o '
+                   'menu de camadas do QGIS para adicionar o serviço '
+                   'manualmente.'),
                 level=Qgis.MessageLevel.Warning,
                 duration=8)
         return
 
     if escolha == 'orto':
         termos = ('ortofoto', 'orto', 'aerea', 'aérea', 'imagem')
-        nome_exibicao = 'SIG@SC Ortofoto (auto)'
+        nome_exibicao = tr('SIG@SC Ortofoto (auto)')
         aviso_extra = ''
     else:
         termos = ('modelo digital de terreno', 'mdt', 'terreno', 'relevo')
-        nome_exibicao = 'SIG@SC MDT (visual, auto)'
-        aviso_extra = (' Esse dado é apenas visual e não serve para gerar '
-                       'curvas.')
+        nome_exibicao = tr('SIG@SC MDT (visual, auto)')
+        aviso_extra = ' ' + tr('Esse dado é apenas visual e não serve para '
+                               'gerar curvas.')
 
     iface.messageBar().pushMessage(
         'OrIFSC',
-        'Consultando o SIG@SC em segundo plano — o QGIS continua livre; a '
-        'camada aparece quando o serviço responder.',
+        tr('Consultando o SIG@SC em segundo plano — o QGIS continua livre; '
+           'a camada aparece quando o serviço responder.'),
         level=Qgis.MessageLevel.Info,
         duration=6)
 
@@ -210,7 +219,8 @@ def adicionar_sigsc(iface: Any, parent: Any = None) -> None:
         alvo = _escolher_camada(camadas, termos)
         if alvo is None:
             raise RuntimeError(
-                'Nenhuma camada correspondente no GetCapabilities do SIG@SC.')
+                tr('Nenhuma camada correspondente no GetCapabilities do '
+                   'SIG@SC.'))
         return alvo[0]
 
     def _concluir(excecao: Optional[Exception],
@@ -218,36 +228,40 @@ def adicionar_sigsc(iface: Any, parent: Any = None) -> None:
         """Roda na thread principal: adiciona a camada ou avisa a falha."""
         _TAREFAS.discard(tarefa)
         if excecao is not None or not nome_camada:
-            QgsMessageLog.logMessage(f'Falha SIG@SC: {excecao}', 'OrIFSC',
-                                     Qgis.MessageLevel.Warning)
+            QgsMessageLog.logMessage(
+                tr('Falha SIG@SC: {erro}', erro=excecao), 'OrIFSC',
+                Qgis.MessageLevel.Warning)
             iface.messageBar().pushMessage(
                 'OrIFSC',
-                'Não foi possível carregar a camada do SIG@SC (serviço fora '
-                'do ar ou lento). Tente novamente pelo menu, ou use o modo '
-                'avançado.',
+                tr('Não foi possível carregar a camada do SIG@SC (serviço '
+                   'fora do ar ou lento). Tente novamente pelo menu, ou use o '
+                   'modo avançado.'),
                 level=Qgis.MessageLevel.Critical,
                 duration=8)
             return
         try:
             _adicionar_wms(iface, nome_exibicao, URL_WMS, nome_camada)
         except Exception as e:
-            QgsMessageLog.logMessage(f'Falha SIG@SC: {e}', 'OrIFSC',
-                                     Qgis.MessageLevel.Warning)
+            QgsMessageLog.logMessage(
+                tr('Falha SIG@SC: {erro}', erro=e), 'OrIFSC',
+                Qgis.MessageLevel.Warning)
             iface.messageBar().pushMessage(
                 'OrIFSC',
-                'O SIG@SC respondeu, mas o QGIS não conseguiu criar a '
-                'camada. Tente novamente pelo menu.',
+                tr('O SIG@SC respondeu, mas o QGIS não conseguiu criar a '
+                   'camada. Tente novamente pelo menu.'),
                 level=Qgis.MessageLevel.Critical,
                 duration=8)
             return
         iface.messageBar().pushMessage(
             'OrIFSC',
-            f'{nome_exibicao} adicionada com sucesso.{aviso_extra}',
+            tr('{camada} adicionada com sucesso.', camada=nome_exibicao)
+            + aviso_extra,
             level=Qgis.MessageLevel.Success,
             duration=6)
 
     tarefa = QgsTask.fromFunction(
-        'OrIFSC — consultando o SIG@SC', _descobrir, on_finished=_concluir)
+        tr('OrIFSC — consultando o SIG@SC'), _descobrir,
+        on_finished=_concluir)
     _TAREFAS.add(tarefa)
     QgsApplication.taskManager().addTask(tarefa)
 

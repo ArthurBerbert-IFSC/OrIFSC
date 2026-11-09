@@ -18,6 +18,7 @@ from qgis.PyQt.QtCore import QMetaType
 import processing
 from qgis.PyQt.QtGui import QIcon
 
+from ..i18n import tr
 from ..rede import baixar_bytes
 from .suavizacao import chaikin as _chaikin
 from .utils import dir_cache, ocultar_da_toolbox, podar_cache
@@ -42,16 +43,9 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
     RECORTE = 'RECORTE'
     OUTPUT_CURVAS = 'OUTPUT_CURVAS'
 
-    def tr(self, s: str) -> str:
-        """Retorna texto sem tradução explícita.
-
-        Args:
-            s: Texto de entrada.
-
-        Returns:
-            str: Texto original.
-        """
-        return s
+    def tr(self, texto: str, **kwargs: Any) -> str:
+        """Traduz para o idioma ativo do plugin (ver ``OrIFSC/i18n``)."""
+        return tr(texto, **kwargs)
 
     def createInstance(self):
         """Cria nova instância do algoritmo para o Processing.
@@ -92,7 +86,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         Returns:
             str: Rótulo do algoritmo.
         """
-        return 'Gerar Curvas de Nível Automáticas'
+        return self.tr('Gerar Curvas de Nível Automáticas')
 
     def group(self) -> str:
         """Nome do grupo visual do algoritmo.
@@ -116,8 +110,9 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         Returns:
             str: HTML de ajuda para o Processing.
         """
-        from ..acoes.painel import painel_html, INSTRUCOES
-        return painel_html('Gerar Curvas de Nível', INSTRUCOES['gerar_curvas'])
+        from ..acoes.painel import painel_html, instrucoes
+        return painel_html(self.tr('Gerar Curvas de Nível'),
+                           instrucoes('gerar_curvas'))
 
     def initAlgorithm(self, config=None) -> None:
         """Declara parâmetros de entrada e saída do algoritmo.
@@ -126,17 +121,19 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             config: Configuração opcional do Processing.
         """
         self.addParameter(QgsProcessingParameterFeatureSource(
-            self.LIMITE, 'Camada da área a mapear (define a extensão do MDT)',
+            self.LIMITE,
+            self.tr('Camada da área a mapear (define a extensão do MDT)'),
             [Qgis.ProcessingSourceType.VectorPolygon]))
         self.addParameter(QgsProcessingParameterNumber(
-            self.EQUIDISTANCIA, 'Equidistância (metros)',
+            self.EQUIDISTANCIA, self.tr('Equidistância (metros)'),
             type=Qgis.ProcessingNumberParameterType.Integer,
             defaultValue=_equidistancia_padrao()))
         self.addParameter(QgsProcessingParameterFeatureSource(
-            self.RECORTE, 'Recortar curvas por (camada — opcional: folha/limite)',
+            self.RECORTE,
+            self.tr('Recortar curvas por (camada — opcional: folha/limite)'),
             [Qgis.ProcessingSourceType.VectorPolygon], optional=True))
         self.addParameter(QgsProcessingParameterFeatureSink(
-            self.OUTPUT_CURVAS, 'Curvas de Nível',
+            self.OUTPUT_CURVAS, self.tr('Curvas de Nível'),
             type=Qgis.ProcessingSourceType.VectorLine))
 
     def processAlgorithm(self, parameters, context, feedback):
@@ -156,42 +153,43 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         """
         camada_limite = self.parameterAsSource(parameters, self.LIMITE, context)
         if camada_limite is None:
-            feedback.pushWarning(
-                'Selecione uma camada poligonal de área antes de gerar curvas.')
+            feedback.pushWarning(self.tr(
+                'Selecione uma camada poligonal de área antes de gerar '
+                'curvas.'))
             raise QgsProcessingException(
-                'Camada da área a mapear não informada.')
+                self.tr('Camada da área a mapear não informada.'))
 
         equidistancia = self.parameterAsInt(
             parameters, self.EQUIDISTANCIA, context)
         if equidistancia <= 0:
             feedback.pushWarning(
-                'A equidistância precisa ser maior que zero.')
-            raise QgsProcessingException('Equidistância inválida.')
+                self.tr('A equidistância precisa ser maior que zero.'))
+            raise QgsProcessingException(self.tr('Equidistância inválida.'))
 
         camada_recorte = self.parameterAsVectorLayer(
             parameters, self.RECORTE, context)
         if camada_recorte is not None and not camada_recorte.isValid():
             feedback.pushWarning(
-                'A camada de recorte selecionada está inválida.')
-            raise QgsProcessingException('Camada de recorte inválida.')
+                self.tr('A camada de recorte selecionada está inválida.'))
+            raise QgsProcessingException(
+                self.tr('Camada de recorte inválida.'))
 
-        feedback.pushInfo('Fonte do MDT: Copernicus 30 m.')
+        feedback.pushInfo(self.tr('Fonte do MDT: Copernicus 30 m.'))
         try:
             mdt_temp = self._baixar_copernicus(camada_limite, context, feedback)
         except QgsProcessingException:
             raise
         except Exception as e:
-            raise QgsProcessingException(
-                'Falha ao obter o MDT Copernicus.\n'
-                f'Erro: {e}')
+            raise QgsProcessingException(self.tr(
+                'Falha ao obter o MDT Copernicus.\nErro: {erro}', erro=e))
 
         if not mdt_temp or not os.path.exists(mdt_temp):
-            raise QgsProcessingException(
-                'Nao foi possivel obter um MDT valido da fonte selecionada. '
-                'Nenhuma outra fonte foi usada automaticamente.')
+            raise QgsProcessingException(self.tr(
+                'Não foi possível obter um MDT válido da fonte selecionada. '
+                'Nenhuma outra fonte foi usada automaticamente.'))
 
         feedback.setProgress(45)
-        feedback.pushInfo('Gerando curvas brutas...')
+        feedback.pushInfo(self.tr('Gerando curvas brutas...'))
         curvas_brutas = processing.run('gdal:contour', {
             'INPUT': mdt_temp,
             'BAND': 1,
@@ -204,7 +202,7 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         camada_brutas = QgsVectorLayer(curvas_brutas, 'curvas_brutas', 'ogr')
         if not camada_brutas.isValid():
             raise QgsProcessingException(
-                'Não foi possível ler as curvas brutas geradas.')
+                self.tr('Não foi possível ler as curvas brutas geradas.'))
 
         # As curvas brutas saem no CRS do MDT (Copernicus = EPSG:4326, graus).
         # Suavização e simplificação usam tolerâncias em metros, então tudo é
@@ -212,8 +210,9 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         crs_saida = self._crs_metrico(camada_limite, context)
         ct_curvas = QgsCoordinateTransform(
             camada_brutas.crs(), crs_saida, context.transformContext())
-        feedback.pushInfo(
-            f'Curvas de saída em {crs_saida.authid()} (CRS métrico).')
+        feedback.pushInfo(self.tr(
+            'Curvas de saída em {crs} (CRS métrico).',
+            crs=crs_saida.authid()))
 
         geom_recorte = None
         fonte_recorte = camada_recorte if camada_recorte is not None else camada_limite
@@ -222,10 +221,11 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
                              else camada_limite.sourceCrs())
         nome_recorte = (camada_recorte.name()
                         if camada_recorte is not None
-                        else 'camada de limite')
+                        else self.tr('camada de limite'))
 
         if fonte_recorte is not None:
-            feedback.pushInfo(f'Preparando recorte por "{nome_recorte}"...')
+            feedback.pushInfo(self.tr('Preparando recorte por "{camada}"...',
+                                      camada=nome_recorte))
             ct_rec = QgsCoordinateTransform(crs_fonte_recorte, crs_saida,
                                             context.transformContext())
             partes_rec = []
@@ -251,17 +251,17 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             campos, Qgis.WkbType.LineString, crs_saida)
         if sink is None:
             raise QgsProcessingException(
-                'Não foi possível criar a camada de saída de curvas.')
+                self.tr('Não foi possível criar a camada de saída de curvas.'))
 
         feedback.setProgress(55)
         tol = self._tolerancia_simplificacao_m()
-        feedback.pushInfo(
+        feedback.pushInfo(self.tr(
             'Suavizando e gravando curvas — etapa mais demorada. Acompanhe o '
-            'contador abaixo: enquanto ele avança, não travou.')
-        feedback.pushInfo(
-            f'Tolerância de simplificação: {tol:.2f} m por passada '
-            '(0,075 mm de papel; desvio total abaixo de 0,15 mm — o menor '
-            'objeto visível no mapa).')
+            'contador abaixo: enquanto ele avança, não travou.'))
+        feedback.pushInfo(self.tr(
+            'Tolerância de simplificação: {tol} m por passada (0,075 mm de '
+            'papel; desvio total abaixo de 0,15 mm — o menor objeto visível '
+            'no mapa).', tol=f'{tol:.2f}'))
 
         # Recorte com geometria "preparada" (índice GEOS): a interseção por
         # curva fica ordens de grandeza mais rápida que geom.intersection().
@@ -293,9 +293,10 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             if i % 25 == 0:
                 feedback.setProgress(55 + int(43 * i / total))
             if i and i % passo_log == 0:
-                feedback.pushInfo(
-                    f'  suavizando: {i}/{total} curvas '
-                    f'({gravadas} gravadas, {puladas} fora da área)')
+                feedback.pushInfo(self.tr(
+                    '  suavizando: {i}/{total} curvas ({gravadas} gravadas, '
+                    '{puladas} fora da área)', i=i, total=total,
+                    gravadas=gravadas, puladas=puladas))
             g = feat.geometry()
             if g is None or g.isEmpty():
                 continue
@@ -337,11 +338,12 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
                     geom_s = QgsGeometry(recortada)
                 gravadas += self._gravar(sink, campos, geom_s, elev)
 
-        feedback.pushInfo(f'{gravadas} linha(s) gravadas na camada de saída.')
+        feedback.pushInfo(self.tr(
+            '{n} linha(s) gravadas na camada de saída.', n=gravadas))
         if puladas:
-            feedback.pushInfo(
-                f'{puladas} curva(s) fora da área de recorte foram puladas '
-                'antes da suavização (sem efeito no resultado).')
+            feedback.pushInfo(self.tr(
+                '{n} curva(s) fora da área de recorte foram puladas antes da '
+                'suavização (sem efeito no resultado).', n=puladas))
         feedback.setProgress(99)
         # Libera o sink AQUI, antes de o QGIS carregar a camada de saída no
         # projeto: buffer/handle ainda abertos nesse momento podem derrubar o
@@ -435,18 +437,21 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             destino = os.path.join(pasta_cache,
                                    f'cop30_{lat_fl}_{lon_fl}.tif')
             if self._cache_valido(destino):
-                feedback.pushInfo(f'Usando tile em cache ({lat_fl}, {lon_fl}).')
+                feedback.pushInfo(self.tr(
+                    'Usando tile em cache ({lat}, {lon}).',
+                    lat=lat_fl, lon=lon_fl))
             else:
                 if os.path.exists(destino):
-                    feedback.pushWarning(
-                        f'Tile em cache inválido ({lat_fl}, {lon_fl}); '
-                        'baixando novamente.')
+                    feedback.pushWarning(self.tr(
+                        'Tile em cache inválido ({lat}, {lon}); baixando '
+                        'novamente.', lat=lat_fl, lon=lon_fl))
                     try:
                         os.remove(destino)
                     except OSError:
                         pass
-                feedback.pushInfo(
-                    f'Baixando tile Copernicus ({lat_fl}, {lon_fl})...')
+                feedback.pushInfo(self.tr(
+                    'Baixando tile Copernicus ({lat}, {lon})...',
+                    lat=lat_fl, lon=lon_fl))
                 parcial = destino + '.part'
                 try:
                     dados = baixar_bytes(url)
@@ -459,9 +464,9 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
                             os.remove(parcial)
                     except OSError:
                         pass
-                    raise QgsProcessingException(
-                        'Falha ao baixar o MDT Copernicus. '
-                        f'Verifique sua conexão com a internet.\nErro: {e}')
+                    raise QgsProcessingException(self.tr(
+                        'Falha ao baixar o MDT Copernicus. Verifique sua '
+                        'conexão com a internet.\nErro: {erro}', erro=e))
             tile_files.append(destino)
         podar_cache()
 
@@ -470,7 +475,8 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
         # o recorte, o contour rodava sobre o(s) tile(s) de 1°x1° inteiro(s)
         # (~111 km de lado) e >99% das curvas nasciam fora da folha, eram
         # suavizadas à toa e descartadas no recorte final ("0 gravadas").
-        feedback.pushInfo('Recortando o MDT na janela da folha (VRT)...')
+        feedback.pushInfo(
+            self.tr('Recortando o MDT na janela da folha (VRT)...'))
         from osgeo import gdal
         mdt_vrt = QgsProcessingUtils.generateTempFilename(
             'orifsc_mdt.vrt')
@@ -478,8 +484,8 @@ class GerarCurvasNivel(QgsProcessingAlgorithm):
             ext.xMinimum() - margem, ext.yMinimum() - margem,
             ext.xMaximum() + margem, ext.yMaximum() + margem))
         if vrt is None:
-            raise QgsProcessingException(
-                'Falha ao montar o mosaico recortado do MDT (BuildVRT).')
+            raise QgsProcessingException(self.tr(
+                'Falha ao montar o mosaico recortado do MDT (BuildVRT).'))
         vrt.FlushCache()
         vrt = None
         return mdt_vrt

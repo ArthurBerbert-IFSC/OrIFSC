@@ -2,7 +2,9 @@
 
 Cria a camada 'folha' (retângulo do tamanho real da folha na escala definida no
 Passo 2), com borda magenta e sem preenchimento. Chamada pelo diálogo de
-Definir Local logo após salvar o retângulo no projeto.
+Definir Local logo após salvar o retângulo no projeto. O nome da camada segue
+o idioma do plugin; ela é reconhecida pela propriedade de papel
+(``comum.camada_folha``), não pelo nome.
 """
 from typing import Any, Optional
 
@@ -13,7 +15,9 @@ from qgis.core import (
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QColor
 
-from .comum import ler_folha, avisar_projeto_nao_configurado
+from ..i18n import tr
+from .comum import (ler_folha, avisar_projeto_nao_configurado, marcar_papel,
+                    PAPEL_FOLHA)
 
 
 def criar_folha(iface: Any, parent: Any = None) -> Optional[QgsVectorLayer]:
@@ -36,7 +40,8 @@ def criar_folha(iface: Any, parent: Any = None) -> Optional[QgsVectorLayer]:
         return None
     epsg, x0, y0, x1, y1 = estado
 
-    folha = QgsVectorLayer(f'Polygon?crs=EPSG:{epsg}', 'folha', 'memory')
+    folha = QgsVectorLayer(f'Polygon?crs=EPSG:{epsg}', tr('folha'), 'memory')
+    marcar_papel(folha, PAPEL_FOLHA)
     feat = QgsFeature()
     feat.setGeometry(QgsGeometry.fromRect(QgsRectangle(x0, y0, x1, y1)))
     folha.dataProvider().addFeatures([feat])

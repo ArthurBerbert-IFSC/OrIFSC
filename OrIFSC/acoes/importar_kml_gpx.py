@@ -17,12 +17,13 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox, QDialogButtonBox,
 )
 
-from .painel import montar_com_painel, INSTRUCOES
+from ..i18n import N_, tr
+from .painel import montar_com_painel, instrucoes
 
 _SUBCAMADAS_GPX = [
-    ('tracks', 'Trilhas (tracks)'),
-    ('routes', 'Rotas (routes)'),
-    ('waypoints', 'Waypoints'),
+    ('tracks', N_('Trilhas (tracks)')),
+    ('routes', N_('Rotas (routes)')),
+    ('waypoints', N_('Waypoints')),
 ]
 
 
@@ -41,7 +42,7 @@ class DialogImportarKmlGpx(QDialog):
         """
         super().__init__(parent)
         self.iface = iface
-        self.setWindowTitle('OrIFSC — Importar KML / GPX')
+        self.setWindowTitle(tr('OrIFSC — Importar KML / GPX'))
         self.setMinimumWidth(420)
 
         layout = QVBoxLayout()
@@ -51,7 +52,7 @@ class DialogImportarKmlGpx(QDialog):
         linha_arquivo = QHBoxLayout()
         self.campo_arquivo = QLineEdit()
         self.campo_arquivo.setPlaceholderText(
-            'Selecione um arquivo .kml ou .gpx')
+            tr('Selecione um arquivo .kml ou .gpx'))
         self.campo_arquivo.textChanged.connect(self._on_arquivo_mudou)
         linha_arquivo.addWidget(self.campo_arquivo, 1)
 
@@ -60,13 +61,13 @@ class DialogImportarKmlGpx(QDialog):
         btn_browse.clicked.connect(self._selecionar_arquivo)
         linha_arquivo.addWidget(btn_browse)
 
-        form.addRow('Arquivo:', linha_arquivo)
+        form.addRow(tr('Arquivo:'), linha_arquivo)
 
-        self.grupo_gpx = QGroupBox('Sub-camadas a importar (GPX)')
+        self.grupo_gpx = QGroupBox(tr('Sub-camadas a importar (GPX)'))
         gpx_layout = QVBoxLayout(self.grupo_gpx)
         self.checks = {}
         for nome_ogr, rotulo in _SUBCAMADAS_GPX:
-            cb = QCheckBox(rotulo)
+            cb = QCheckBox(tr(rotulo))
             cb.setChecked(nome_ogr == 'tracks')
             gpx_layout.addWidget(cb)
             self.checks[nome_ogr] = cb
@@ -75,21 +76,23 @@ class DialogImportarKmlGpx(QDialog):
 
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                   QDialogButtonBox.StandardButton.Cancel)
-        botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Importar')
         botoes.button(
-            QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
+            QDialogButtonBox.StandardButton.Ok).setText(tr('Importar'))
+        botoes.button(
+            QDialogButtonBox.StandardButton.Cancel).setText(tr('Cancelar'))
         botoes.accepted.connect(self._importar)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
 
-        montar_com_painel(self, layout, 'Importar KML / GPX',
-                          INSTRUCOES['importar_kml_gpx'])
+        montar_com_painel(self, layout, tr('Importar KML / GPX'),
+                          instrucoes('importar_kml_gpx'))
 
     def _selecionar_arquivo(self) -> None:
         """Abre seletor de arquivo geográfico e preenche o campo de caminho."""
         path, _ = QFileDialog.getOpenFileName(
-            self, 'Selecionar arquivo KML ou GPX', '',
-            'Arquivos geográficos (*.kml *.gpx);;KML (*.kml);;GPX (*.gpx)')
+            self, tr('Selecionar arquivo KML ou GPX'), '',
+            tr('Arquivos geográficos (*.kml *.gpx);;KML (*.kml);;GPX '
+               '(*.gpx)'))
         if path:
             self.campo_arquivo.setText(path)
 
@@ -105,7 +108,7 @@ class DialogImportarKmlGpx(QDialog):
         if not path or not os.path.isfile(path):
             self.iface.messageBar().pushMessage(
                 'OrIFSC',
-                'Selecione um arquivo KML ou GPX existente.',
+                tr('Selecione um arquivo KML ou GPX existente.'),
                 level=Qgis.MessageLevel.Warning,
                 duration=6)
             return
@@ -121,12 +124,13 @@ class DialogImportarKmlGpx(QDialog):
             if not selecionadas:
                 self.iface.messageBar().pushMessage(
                     'OrIFSC',
-                    'Marque ao menos uma sub-camada do GPX para importar.',
+                    tr('Marque ao menos uma sub-camada do GPX para '
+                       'importar.'),
                     level=Qgis.MessageLevel.Warning,
                     duration=6)
                 return
             for nome_ogr in selecionadas:
-                rotulo = dict(_SUBCAMADAS_GPX)[nome_ogr]
+                rotulo = tr(dict(_SUBCAMADAS_GPX)[nome_ogr])
                 uri = f'{path}|layername={nome_ogr}'
                 camada = QgsVectorLayer(uri, f'{nome_base} — {rotulo}', 'ogr')
                 if camada.isValid() and camada.featureCount() > 0:
@@ -141,8 +145,8 @@ class DialogImportarKmlGpx(QDialog):
         if not camadas_carregadas:
             self.iface.messageBar().pushMessage(
                 'OrIFSC',
-                'Não foi possível carregar camadas válidas desse arquivo. '
-                'Verifique se ele contém dados compatíveis.',
+                tr('Não foi possível carregar camadas válidas desse arquivo. '
+                   'Verifique se ele contém dados compatíveis.'),
                 level=Qgis.MessageLevel.Warning,
                 duration=8)
             return
@@ -150,7 +154,7 @@ class DialogImportarKmlGpx(QDialog):
         self._zoom_para_camadas(camadas_carregadas)
         self.iface.messageBar().pushMessage(
             'OrIFSC',
-            'Importação concluída com sucesso.',
+            tr('Importação concluída com sucesso.'),
             level=Qgis.MessageLevel.Success,
             duration=5)
         self.accept()

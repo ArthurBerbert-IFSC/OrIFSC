@@ -7,12 +7,13 @@ import os
 import configparser
 from typing import Any, Mapping
 
-from qgis.core import QgsSettings
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QTextBrowser, QDialogButtonBox,
 )
 from qgis.PyQt.QtCore import QUrl
 from qgis.PyQt.QtGui import QDesktopServices
+
+from ..i18n import idioma, tr
 
 _METADATA = os.path.join(
     os.path.dirname(
@@ -34,17 +35,11 @@ def _geral() -> Mapping[str, str]:
     return cfg['general'] if cfg.has_section('general') else {}
 
 
-def _idioma() -> str:
-    """Código de idioma do QGIS (ex.: 'pt'), ou '' se indefinido."""
-    loc = QgsSettings().value('locale/userLocale', '') or ''
-    return loc.split('_')[0].lower()
-
-
 def _localizado(g: Mapping[str, str], chave: str) -> str:
-    """Valor de `chave` no idioma do QGIS (chave[xx]) com fallback para o
-    padrão (inglês). O metadata.txt traz description/about em inglês e a
-    variante [pt] em português."""
-    lang = _idioma()
+    """Valor de `chave` no idioma do plugin (chave[xx]) com fallback para o
+    padrão (inglês). O metadata.txt traz description/about em inglês e as
+    variantes [pt] (português) e [tr] (turco)."""
+    lang = idioma()
     if lang:
         traduzido = g.get(f'{chave}[{lang}]')
         if traduzido:
@@ -67,17 +62,19 @@ def sobre(parent: Any = None) -> None:
     corpo = (
         f'<p style="color:{C["texto_desc"]}; font-size:12px;">{about}</p>'
         f'<p style="color:{C["texto2"]}; font-size:12px;">'
-        f'<b style="color:{C["texto"]};">Autoria:</b> {autor}</p>'
+        f'<b style="color:{C["texto"]};">{tr("Autoria:")}</b> {autor}</p>'
         '<p style="font-size:12px;">'
-        f'<a href="{repo}" style="color:{C["acento"]};">Repositório</a>'
+        f'<a href="{repo}" style="color:{C["acento"]};">'
+        f'{tr("Repositório")}</a>'
         '&nbsp;&nbsp;·&nbsp;&nbsp;'
-        f'<a href="{tracker}" style="color:{C["acento"]};">Reportar problema</a>'
+        f'<a href="{tracker}" style="color:{C["acento"]};">'
+        f'{tr("Reportar problema")}</a>'
         '</p>'
     )
-    html = painel_html(f'OrIFSC {versao}', corpo, rotulo='SOBRE')
+    html = painel_html(f'OrIFSC {versao}', corpo, rotulo=tr('SOBRE'))
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle('Sobre o OrIFSC')
+    dlg.setWindowTitle(tr('Sobre o OrIFSC'))
     layout = QVBoxLayout(dlg)
 
     tb = QTextBrowser()
@@ -89,7 +86,7 @@ def sobre(parent: Any = None) -> None:
     layout.addWidget(tb)
 
     botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-    botoes.button(QDialogButtonBox.StandardButton.Close).setText('Fechar')
+    botoes.button(QDialogButtonBox.StandardButton.Close).setText(tr('Fechar'))
     botoes.rejected.connect(dlg.reject)
     botoes.accepted.connect(dlg.accept)
     layout.addWidget(botoes)

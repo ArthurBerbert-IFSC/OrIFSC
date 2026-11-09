@@ -50,3 +50,22 @@ def omap():
 def simbologia():
     return carregar_modulo('orifsc_simbologia',
                            'algorithms', 'ocad', 'simbologia.py')
+
+
+@pytest.fixture
+def i18n():
+    """Módulo de i18n com o idioma forçado a cada teste (sem QGIS, a
+    preferência salva não existe) e restaurado ao final."""
+    mod = carregar_modulo('orifsc_i18n', 'i18n', '__init__.py')
+    yield mod
+    mod.definir_idioma_ativo(None)
+
+
+@pytest.fixture(scope='session')
+def extrator():
+    """tools/i18n_atualizar.py — extração dos textos traduzíveis."""
+    arquivo = os.path.join(RAIZ, 'tools', 'i18n_atualizar.py')
+    spec = importlib.util.spec_from_file_location('i18n_atualizar', arquivo)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod

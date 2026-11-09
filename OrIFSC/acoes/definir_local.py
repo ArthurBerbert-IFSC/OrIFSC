@@ -17,17 +17,15 @@ from qgis.PyQt.QtWidgets import (
     QDialogButtonBox,
 )
 
+from ..i18n import N_, formatar_inteiro, tr
 from .comum import salvar_folha, salvar_escala
-from .painel import montar_com_painel, INSTRUCOES
+from .configuracoes import ORIENTACOES
+from .painel import montar_com_painel, instrucoes
 
-ESCALAS = [
-    ('1:4.000', 4000),
-    ('1:5.000', 5000),
-    ('1:7.500', 7500),
-    ('1:10.000', 10000),
-    ('1:15.000', 15000),
-    ('Personalizada...', -1),
-]
+# Denominadores das escalas pré-definidas; -1 = personalizada. O rótulo é
+# montado na tela, com o separador de milhar do idioma (1:10.000 / 1:10,000).
+ESCALAS = [4000, 5000, 7500, 10000, 15000, -1]
+ROTULO_PERSONALIZADA = N_('Personalizada...')
 
 FOLHAS = [('A3', 420, 297), ('A4', 297, 210), ('A5', 210, 148)]
 
@@ -47,7 +45,7 @@ class DialogDefinirLocal(QDialog):
         """
         super().__init__(parent)
         self.iface = iface
-        self.setWindowTitle('OrIFSC — Definir Local e Criar Folha')
+        self.setWindowTitle(tr('OrIFSC — Definir Local e Criar Folha'))
         self.setMinimumWidth(400)
 
         layout = QVBoxLayout()
@@ -55,51 +53,54 @@ class DialogDefinirLocal(QDialog):
         layout.addLayout(form)
 
         self.coord_input = QLineEdit()
-        self.coord_input.setPlaceholderText('Ex: -27.5926, -48.5431')
-        form.addRow('Coordenada (Google Maps):', self.coord_input)
+        self.coord_input.setPlaceholderText(tr('Ex: -27.5926, -48.5431'))
+        form.addRow(tr('Coordenada (Google Maps):'), self.coord_input)
 
         self.escala_combo = QComboBox()
-        for label, _ in ESCALAS:
-            self.escala_combo.addItem(label)
+        for val in ESCALAS:
+            self.escala_combo.addItem(
+                tr(ROTULO_PERSONALIZADA) if val == -1
+                else '1:' + formatar_inteiro(val))
         self.escala_combo.currentIndexChanged.connect(self._on_escala_changed)
-        form.addRow('Escala:', self.escala_combo)
+        form.addRow(tr('Escala:'), self.escala_combo)
 
         self.escala_custom = QSpinBox()
         self.escala_custom.setRange(500, 500000)
         self.escala_custom.setValue(4000)
-        self.escala_custom.setSuffix('  (denominador)')
+        self.escala_custom.setSuffix(tr('  (denominador)'))
         self.escala_custom.setVisible(False)
-        form.addRow('Valor personalizado:', self.escala_custom)
+        form.addRow(tr('Valor personalizado:'), self.escala_custom)
 
         self.folha_combo = QComboBox()
         for nome, _, _ in FOLHAS:
             self.folha_combo.addItem(nome)
         self.folha_combo.setCurrentIndex(1)
         self.folha_combo.currentIndexChanged.connect(self._atualizar_preview)
-        form.addRow('Tamanho da Folha:', self.folha_combo)
+        form.addRow(tr('Tamanho da Folha:'), self.folha_combo)
 
         self.orientacao_combo = QComboBox()
-        self.orientacao_combo.addItems(['Paisagem', 'Retrato'])
+        for ori in ORIENTACOES:
+            self.orientacao_combo.addItem(tr(ori), ori)
         self.orientacao_combo.currentIndexChanged.connect(
             self._atualizar_preview)
-        form.addRow('Orientação:', self.orientacao_combo)
+        form.addRow(tr('Orientação:'), self.orientacao_combo)
 
         self.preview_label = QLabel()
         self.preview_label.setStyleSheet('color: #555; font-style: italic;')
-        form.addRow('Área no terreno:', self.preview_label)
+        form.addRow(tr('Área no terreno:'), self.preview_label)
 
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                   QDialogButtonBox.StandardButton.Cancel)
         botoes.button(
-            QDialogButtonBox.StandardButton.Ok).setText('Criar Folha')
+            QDialogButtonBox.StandardButton.Ok).setText(tr('Criar Folha'))
         botoes.button(
-            QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
+            QDialogButtonBox.StandardButton.Cancel).setText(tr('Cancelar'))
         botoes.accepted.connect(self._definir)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
 
-        montar_com_painel(self, layout, 'Definir Local e Criar Folha',
-                          INSTRUCOES['definir_local'])
+        montar_com_painel(self, layout, tr('Definir Local e Criar Folha'),
+                          instrucoes('definir_local'))
 
         self._aplicar_padroes()
         self._atualizar_preview()
@@ -113,7 +114,7 @@ class DialogDefinirLocal(QDialog):
         except Exception:
             return
         padrao = ler_escala_padrao()
-        for i, (_, val) in enumerate(ESCALAS):
+        for i, val in enumerate(ESCALAS):
             if val == padrao:
                 self.escala_combo.setCurrentIndex(i)
                 break
@@ -150,7 +151,7 @@ class DialogDefinirLocal(QDialog):
         Args:
             idx: Índice selecionado no combo de escalas.
         """
-        self.escala_custom.setVisible(ESCALAS[idx][1] == -1)
+        self.escala_custom.setVisible(ESCALAS[idx] == -1)
         self._atualizar_preview()
 
     def _escala_valor(self) -> int:
@@ -160,7 +161,7 @@ class DialogDefinirLocal(QDialog):
             int: Denominador da escala padrão ou personalizada.
         """
         idx = self.escala_combo.currentIndex()
-        val = ESCALAS[idx][1]
+        val = ESCALAS[idx]
         return self.escala_custom.value() if val == -1 else val
 
     def _dimensoes_mm(self) -> Tuple[int, int]:
@@ -192,8 +193,8 @@ class DialogDefinirLocal(QDialog):
         except Exception:
             self.iface.messageBar().pushMessage(
                 'OrIFSC',
-                'Informe a coordenada no formato Lat, Lon. Exemplo: '
-                '-27.5926, -48.5431.',
+                tr('Informe a coordenada no formato Lat, Lon. Exemplo: '
+                   '-27.5926, -48.5431.'),
                 level=Qgis.MessageLevel.Warning,
                 duration=6)
             return
@@ -201,8 +202,8 @@ class DialogDefinirLocal(QDialog):
         if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
             self.iface.messageBar().pushMessage(
                 'OrIFSC',
-                'A coordenada informada está fora do intervalo esperado. '
-                'Verifique latitude e longitude antes de continuar.',
+                tr('A coordenada informada está fora do intervalo esperado. '
+                   'Verifique latitude e longitude antes de continuar.'),
                 level=Qgis.MessageLevel.Warning,
                 duration=6)
             return

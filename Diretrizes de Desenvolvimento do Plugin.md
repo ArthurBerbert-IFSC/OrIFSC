@@ -25,6 +25,10 @@
 - **Rede** (`OrIFSC\rede.py`):
   - `baixar_bytes`: requisições unitárias via rede do QGIS.
   - `baixar_varios`: download paralelo HTTP para mosaicos de tiles.
+- **Internacionalização** (`OrIFSC\i18n\`) — módulo puro, sem QGIS:
+  - `tr(texto_pt, **kwargs)` traduz para o idioma ativo; `N_()` só marca texto para extração (listas no nível do módulo cujo valor também é chave salva);
+  - catálogos `en.json` e `tr.json` (o texto em português é a chave, estilo gettext); texto sem tradução cai no português;
+  - idioma escolhido no submenu **Idioma / Language** do menu OrIFSC ou em **Configurações** (preferência global `OrIFSC/idioma`); o padrão `auto` segue o idioma do QGIS, e idioma do QGIS sem catálogo cai no inglês. A troca reconstrói o menu na hora.
 
 ## 2. Regras de negócio identificadas
 
@@ -85,6 +89,8 @@
 - Caches persistentes (tiles de MDT/satélite) em `QgsApplication.qgisSettingsDirPath()/cache/orifsc`, com validação de integridade (tamanho mínimo) e re-download automático de arquivos corrompidos.
 - Reutilize `acoes/comum.py` e `acoes/configuracoes.py` para qualquer novo estado.
 - Documente decisões técnicas importantes em docstrings (não em comentários longos soltos).
+- **Todo texto visível ao usuário passa por `tr()`** (menus, diálogos, painéis, parâmetros e mensagens de Processing, message bar, log). Valores dinâmicos entram por **placeholders nomeados** (`tr('{n} curva(s) lida(s).', n=total)`), para o tradutor poder reordenar a frase. Textos montados no nível do módulo viram função ou usam `N_()` + `tr(valor)` na exibição — senão ficam congelados no idioma do momento do import.
+- Ao criar ou mudar um texto: `python tools/i18n_atualizar.py` (adiciona a chave nova nos catálogos, com valor vazio) e traduza em `en.json` e `tr.json`; `--podar` remove chaves que saíram do código. O teste `tests/test_i18n.py` falha se faltar tradução, sobrar chave órfã ou se a tradução perder placeholders/tags HTML.
 
 ### Não faça
 
@@ -98,14 +104,17 @@
 - Não alterar as creation options do GeoTIFF **final** do satélite (RGB, LZW, `TILED=NO`, `BIGTIFF=NO`) — requisito do OCAD 10.
 - Não reintroduzir FABDEM nem itens de menu/configuração desabilitados como placeholder.
 - Não expandir o uso de tiles do Google para novas funcionalidades (ver seção 6).
+- Não usar f-string nem concatenação com `+` dentro de `tr()` (a chave mudaria a cada execução e nunca seria traduzida) — o teste de i18n acusa.
+- Não traduzir identificadores persistidos: nomes das conexões WMS/WMTS do SIG@SC gravadas no QGIS, valores salvos em `QgsSettings` (orientação e simbologia são salvas pelo rótulo original em português; a tela mostra a tradução) e nomes de arquivo gerados (`projeto_orifsc.ocd`, `satelite_orifsc.tif`).
+- Não identificar camadas-chave pelo nome — os nomes são traduzidos (ver seção 5).
 
 ## 5. Convenções técnicas do projeto
 
-- Nome de camadas-chave: `folha`, `limite`, `Curvas de Nível` (ou variantes detectáveis).
+- Camadas-chave: `folha` e `limite` recebem o nome no idioma do plugin (`folha`/`sheet`/`pafta`, `limite`/`boundary`/`sınır`) e são reconhecidas pela propriedade customizada `orifsc/papel` (`comum.marcar_papel`, `comum.camada_folha`); projetos antigos, sem a propriedade, caem no nome `folha`. A camada de curvas é reconhecida pelo campo `ELEV` (ou por nome em pt/en/tr) em `comum.camada_curvas`.
 - Algoritmos de Processing devem permanecer ocultos da toolbox e acessíveis pelo menu OrIFSC.
 - Quando necessário preservar contexto histórico (ex.: limitações de OCAD/GDAL), priorizar docstring no método responsável.
 - `__pycache__`/`.pyc` não entram no repositório nem no zip publicado.
-- **Testes** (`tests/`): cobrem os módulos puros (escritores `.ocd`/`.omap`, cálculos UTM, suavização) e rodam sem QGIS — `python -m pytest tests/` local e no CI (`.github/workflows/testes.yml`) a cada push/PR. Módulos novos com lógica pura devem nascer sem imports de `qgis` no nível do módulo (ex.: `suavizacao.py`; import tardio quando inevitável, como em `geo.py`), para continuarem testáveis.
+- **Testes** (`tests/`): cobrem os módulos puros (escritores `.ocd`/`.omap`, cálculos UTM, suavização, i18n e completude dos catálogos de tradução) e rodam sem QGIS — `python -m pytest tests/` local e no CI (`.github/workflows/testes.yml`) a cada push/PR. Módulos novos com lógica pura devem nascer sem imports de `qgis` no nível do módulo (ex.: `suavizacao.py`; import tardio quando inevitável, como em `geo.py`), para continuarem testáveis.
 - Lógica nova em módulo puro ganha teste junto; ao mexer nos escritores OCD/OMAP, rodar a suíte antes de publicar.
 - Docstrings sem seções vazias ("Args: None / Returns: None"): descreva o que importa ou apenas a linha de resumo.
 
