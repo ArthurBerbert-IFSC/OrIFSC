@@ -10,6 +10,7 @@ from qgis.core import QgsMessageLog, Qgis
 from qgis.PyQt.QtWidgets import QAction
 from qgis.PyQt.QtWidgets import QMessageBox
 
+from ..i18n import tr
 from .carregar_satelite import adicionar_xyz
 
 URL_OSM = ('type=xyz&url=https://tile.openstreetmap.org/'
@@ -56,18 +57,19 @@ def abrir_gerenciador_wms(iface: Any, parent: Any = None) -> bool:
         iface.actionAddWmsLayer().trigger()
         return True
     except Exception as e:
-        QgsMessageLog.logMessage(f'Falha ao abrir o gerenciador WMS: {e}',
-                                 'OrIFSC', Qgis.MessageLevel.Warning)
+        QgsMessageLog.logMessage(
+            tr('Falha ao abrir o gerenciador WMS: {erro}', erro=e),
+            'OrIFSC', Qgis.MessageLevel.Warning)
         if hasattr(iface, 'messageBar'):
             iface.messageBar().pushMessage(
                 'OrIFSC',
-                'Não foi possível abrir o gerenciador WMS/WMTS. Use o menu '
-                'de camadas do QGIS para abrir a opção manualmente.',
+                tr('Não foi possível abrir o gerenciador WMS/WMTS. Use o menu '
+                   'de camadas do QGIS para abrir a opção manualmente.'),
                 level=Qgis.MessageLevel.Warning,
                 duration=8)
         else:
             QMessageBox.information(
-                parent, 'Adicionar WMS/WMTS',
-                'Abra manualmente em: Camada → Adicionar Camada → '
-                'Adicionar Camada WMS/WMTS…')
+                parent, tr('Adicionar WMS/WMTS'),
+                tr('Abra manualmente em: Camada → Adicionar Camada → '
+                   'Adicionar Camada WMS/WMTS…'))
         return False

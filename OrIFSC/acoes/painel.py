@@ -10,6 +10,9 @@ duas formas:
     (`painel_html`), que o QGIS renderiza no painel de ajuda à direita do
     diálogo: Gerar Curvas, Exportar para o OCAD.
 
+Os textos passam por ``tr()`` (``OrIFSC/i18n``) no momento de montar o HTML
+(`instrucoes(chave)`), então o painel sai no idioma ativo do plugin.
+
 O alvo de renderização é o Qt rich text (subconjunto de HTML4/CSS2). Por isso o
 layout é todo em `<table>` + `bgcolor`/`width`/`cellpadding` e as imagens são
 PNG (SVG não renderiza). Os componentes visuais (cabeçalho de marca, card,
@@ -24,6 +27,8 @@ import os
 from typing import Any, Iterable, Optional, Sequence
 
 from qgis.PyQt.QtWidgets import QTextBrowser, QHBoxLayout
+
+from ..i18n import maiusculas, tr
 
 RECURSOS = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'recursos')
 
@@ -122,9 +127,10 @@ def _card(titulo: str, subtitulo: str, icone: Optional[str] = None) -> str:
 
 
 def _secao(rotulo: str) -> str:
-    """Rótulo de seção em cinza, MAIÚSCULAS (ex.: "O QUE FAZ")."""
+    """Rótulo de seção em cinza, MAIÚSCULAS (ex.: "O QUE FAZ"), com a regra
+    de maiúsculas do idioma ativo (turco: i → İ)."""
     return (f'<p style="color:{C["texto2"]}; font-size:10px;">'
-            f'<b>{rotulo.upper()}</b></p>')
+            f'<b>{maiusculas(rotulo)}</b></p>')
 
 
 def _bullets(itens: Sequence[str]) -> str:
@@ -236,72 +242,95 @@ def montar_com_painel(
             altura_min))
 
 
-INSTRUCOES = {
-    'definir_local': (
-        _passos([
-            ('Cole a coordenada',
-             'Lat, Lon do Google Maps — o campo já vem com o centro da vista atual.'),
-            ('Escolha escala e folha',
-             'Defina a escala e o tamanho da folha (A3 / A4 / A5).'),
-            ('Crie a folha',
-             'Confira a <b>área no terreno</b> e clique em <b>Criar Folha</b>.'),
-        ])
-        + _esp()
-        + _dica('O projeto é configurado em <b>UTM</b> e a camada '
-                '<b>folha</b> é criada.')
-    ),
-    'configuracoes': (
-        _secao('Padrões globais')
-        + _bullets([
-            'Escala, folha e orientação pré-selecionadas em <i>Definir Local</i>.',
-            'Equidistância padrão das curvas de nível.',
-            'Pasta de saída padrão da exportação.',
-        ])
-        + _esp()
-        + _dica('Valem para <b>todos os projetos</b>.')
-    ),
-    'gerar_curvas': (
-        _card('MDT Copernicus 30 m', 'Gratuito · sem chave de API', 'mdt.png')
-        + _esp()
-        + _secao('O que faz')
-        + _bullets([
-            'Baixa o <b>MDT Copernicus 30 m</b> e gera <b>curvas suavizadas</b> '
-            'para a área da folha.',
-            '<b>Recorte opcional</b> — corta as curvas na borda de uma camada '
-            '(a folha ou o limite).',
-        ])
-        + _esp()
-        + _dica('Deixe <b>Recortar por</b> em branco para recortar pela '
-                'própria área a mapear (não precisa selecioná-la de novo).')
-    ),
-    'importar_kml_gpx': (
-        _secao('O que faz')
-        + _bullets([
-            '<b>GPX</b> — escolha as sub-camadas: trilhas, rotas e/ou waypoints.',
-            '<b>KML</b> — importado diretamente; todas as feições são carregadas.',
-        ])
-        + _esp()
-        + _dica('O mapa é centralizado na extensão do arquivo importado.')
-    ),
-    'exportar_ocad': (
-        _secao('O que gera')
-        + _bullets([
-            '<b>projeto_orifsc.ocd</b> — abre direto no <b>OCAD 10+</b>.',
-            '<b>projeto_orifsc.omap</b> — abre no <b>OpenOrienteering Mapper</b>.',
-        ])
-        + _esp()
-        + _secao('Já vem configurado')
-        + _bullets([
-            '<b>Georreferência</b> (UTM, escala e grade) e <b>declinação '
-            'magnética</b> (automática via WMM/NOAA, ou manual).',
-            'O <b>satélite</b> como mapa de fundo georreferenciado.',
-            'As <b>curvas de nível</b> já como objetos de linha '
-            '(mestras no símbolo 102 a cada 5ª equidistância).',
-            'A <b>paleta de símbolos oficial</b> (ISOM 2017-2 ou '
-            'ISSprOM 2019-2) pronta para desenhar.',
-        ])
-        + _esp()
-        + _dica('Posicione a folha e salve as edições antes de gerar. Mantenha '
-                'o <b>.tif</b> do satélite junto dos projetos.')
-    ),
-}
+def instrucoes(chave: str) -> str:
+    """HTML das instruções do painel de cada tela, no idioma ativo do plugin.
+
+    É função (e não um dict no nível do módulo) para o texto ser traduzido no
+    momento de exibir — o idioma pode mudar com o QGIS aberto.
+    """
+    if chave == 'definir_local':
+        return (
+            _passos([
+                (tr('Cole a coordenada'),
+                 tr('Lat, Lon do Google Maps — o campo já vem com o centro da '
+                    'vista atual.')),
+                (tr('Escolha escala e folha'),
+                 tr('Defina a escala e o tamanho da folha (A3 / A4 / A5).')),
+                (tr('Crie a folha'),
+                 tr('Confira a <b>área no terreno</b> e clique em <b>Criar '
+                    'Folha</b>.')),
+            ])
+            + _esp()
+            + _dica(tr('O projeto é configurado em <b>UTM</b> e a camada '
+                       '<b>folha</b> é criada.'))
+        )
+    if chave == 'configuracoes':
+        return (
+            _secao(tr('Padrões globais'))
+            + _bullets([
+                tr('Escala, folha e orientação pré-selecionadas em <i>Definir '
+                   'Local</i>.'),
+                tr('Equidistância padrão das curvas de nível.'),
+                tr('Pasta de saída padrão da exportação.'),
+                tr('<b>Idioma</b> do plugin (Português, English, Türkçe).'),
+            ])
+            + _esp()
+            + _dica(tr('Valem para <b>todos os projetos</b>.'))
+        )
+    if chave == 'gerar_curvas':
+        return (
+            _card(tr('MDT Copernicus 30 m'), tr('Gratuito · sem chave de API'),
+                  'mdt.png')
+            + _esp()
+            + _secao(tr('O que faz'))
+            + _bullets([
+                tr('Baixa o <b>MDT Copernicus 30 m</b> e gera <b>curvas '
+                   'suavizadas</b> para a área da folha.'),
+                tr('<b>Recorte opcional</b> — corta as curvas na borda de uma '
+                   'camada (a folha ou o limite).'),
+            ])
+            + _esp()
+            + _dica(tr('Deixe <b>Recortar por</b> em branco para recortar pela '
+                       'própria área a mapear (não precisa selecioná-la de '
+                       'novo).'))
+        )
+    if chave == 'importar_kml_gpx':
+        return (
+            _secao(tr('O que faz'))
+            + _bullets([
+                tr('<b>GPX</b> — escolha as sub-camadas: trilhas, rotas e/ou '
+                   'waypoints.'),
+                tr('<b>KML</b> — importado diretamente; todas as feições são '
+                   'carregadas.'),
+            ])
+            + _esp()
+            + _dica(tr('O mapa é centralizado na extensão do arquivo '
+                       'importado.'))
+        )
+    if chave == 'exportar_ocad':
+        return (
+            _secao(tr('O que gera'))
+            + _bullets([
+                tr('<b>projeto_orifsc.ocd</b> — abre direto no <b>OCAD '
+                   '10+</b>.'),
+                tr('<b>projeto_orifsc.omap</b> — abre no <b>OpenOrienteering '
+                   'Mapper</b>.'),
+            ])
+            + _esp()
+            + _secao(tr('Já vem configurado'))
+            + _bullets([
+                tr('<b>Georreferência</b> (UTM, escala e grade) e '
+                   '<b>declinação magnética</b> (automática via WMM/NOAA, ou '
+                   'manual).'),
+                tr('O <b>satélite</b> como mapa de fundo georreferenciado.'),
+                tr('As <b>curvas de nível</b> já como objetos de linha '
+                   '(mestras no símbolo 102 a cada 5ª equidistância).'),
+                tr('A <b>paleta de símbolos oficial</b> (ISOM 2017-2 ou '
+                   'ISSprOM 2019-2) pronta para desenhar.'),
+            ])
+            + _esp()
+            + _dica(tr('Posicione a folha e salve as edições antes de gerar. '
+                       'Mantenha o <b>.tif</b> do satélite junto dos '
+                       'projetos.'))
+        )
+    raise KeyError(chave)

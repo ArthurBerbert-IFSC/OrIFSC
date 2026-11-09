@@ -4,6 +4,11 @@ Guarda preferências do usuário em `QgsSettings` (prefixo `OrIFSC/`), válidas 
 todos os projetos — diferente de `comum.py`, que guarda o estado *do projeto*
 atual (folha, escala, EPSG). Outros passos leem esses padrões: `definir_local`
 pré-seleciona escala/folha/orientação e `gerar_curvas` usa a equidistância.
+
+O idioma do plugin também é escolhido aqui (preferência ``OrIFSC/idioma``,
+gerida por ``OrIFSC/i18n``). As opções de orientação e simbologia são salvas
+pelo rótulo original em português — chave estável, compatível com versões
+anteriores; a tela mostra a tradução.
 """
 from typing import Any
 
@@ -13,17 +18,19 @@ from qgis.PyQt.QtWidgets import (
     QLineEdit, QPushButton, QDialogButtonBox, QFileDialog,
 )
 
-from .painel import montar_com_painel, INSTRUCOES
+from ..i18n import (AUTO, IDIOMAS, N_, idioma, preferencia_idioma,
+                    salvar_preferencia_idioma, tr)
+from .painel import montar_com_painel, instrucoes
 
 PREFIXO = 'OrIFSC/'
 
 FOLHAS = ['A3', 'A4', 'A5']
-ORIENTACOES = ['Paisagem', 'Retrato']
+ORIENTACOES = [N_('Paisagem'), N_('Retrato')]
 SIMBOLOGIAS = [
-    'Automática (pela escala do projeto)',
-    'ISOM 2017-2 (floresta)',
-    'ISSprOM 2019-2 (sprint)',
-    'Nenhuma (só curvas)',
+    N_('Automática (pela escala do projeto)'),
+    N_('ISOM 2017-2 (floresta)'),
+    N_('ISSprOM 2019-2 (sprint)'),
+    N_('Nenhuma (só curvas)'),
 ]
 
 PADROES = {
@@ -150,7 +157,8 @@ class DialogConfiguracoes(QDialog):
         consistente entre projetos e sessões, como definido nas diretrizes.
         """
         super().__init__(parent)
-        self.setWindowTitle('OrIFSC — Configurações')
+        self.idioma_mudou = False
+        self.setWindowTitle(tr('OrIFSC — Configurações'))
         self.setMinimumWidth(420)
 
         layout = QVBoxLayout()
@@ -160,24 +168,35 @@ class DialogConfiguracoes(QDialog):
         self.escala_spin = QSpinBox()
         self.escala_spin.setRange(500, 500000)
         self.escala_spin.setPrefix('1:')
-        form.addRow('Escala padrão:', self.escala_spin)
+        form.addRow(tr('Escala padrão:'), self.escala_spin)
 
         self.folha_combo = QComboBox()
         self.folha_combo.addItems(FOLHAS)
-        form.addRow('Tamanho de folha padrão:', self.folha_combo)
+        form.addRow(tr('Tamanho de folha padrão:'), self.folha_combo)
 
         self.orientacao_combo = QComboBox()
-        self.orientacao_combo.addItems(ORIENTACOES)
-        form.addRow('Orientação padrão:', self.orientacao_combo)
+        for ori in ORIENTACOES:
+            self.orientacao_combo.addItem(tr(ori), ori)
+        form.addRow(tr('Orientação padrão:'), self.orientacao_combo)
 
         self.equi_spin = QSpinBox()
         self.equi_spin.setRange(1, 100)
         self.equi_spin.setSuffix(' m')
-        form.addRow('Equidistância padrão:', self.equi_spin)
+        form.addRow(tr('Equidistância padrão:'), self.equi_spin)
 
         self.simb_combo = QComboBox()
-        self.simb_combo.addItems(SIMBOLOGIAS)
-        form.addRow('Simbologia da exportação:', self.simb_combo)
+        for simb in SIMBOLOGIAS:
+            self.simb_combo.addItem(tr(simb), simb)
+        form.addRow(tr('Simbologia da exportação:'), self.simb_combo)
+
+        # Rótulo sempre com "Language": quem não lê o idioma atual acha a opção.
+        self.idioma_combo = QComboBox()
+        self.idioma_combo.addItem(tr('Automático (idioma do QGIS)'), AUTO)
+        for codigo, nome in IDIOMAS:
+            self.idioma_combo.addItem(nome, codigo)
+        rotulo_idioma = ('Language:' if idioma() == 'en'
+                         else tr('Idioma') + ' (Language):')
+        form.addRow(rotulo_idioma, self.idioma_combo)
 
         pasta_box = QHBoxLayout()
         self.pasta_edit = QLineEdit()
@@ -186,19 +205,20 @@ class DialogConfiguracoes(QDialog):
         btn_pasta.clicked.connect(self._escolher_pasta)
         pasta_box.addWidget(self.pasta_edit)
         pasta_box.addWidget(btn_pasta)
-        form.addRow('Pasta de saída padrão:', pasta_box)
+        form.addRow(tr('Pasta de saída padrão:'), pasta_box)
 
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                   QDialogButtonBox.StandardButton.Cancel)
-        botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Salvar')
+        botoes.button(QDialogButtonBox.StandardButton.Ok).setText(tr('Salvar'))
         botoes.button(
-            QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
+            QDialogButtonBox.StandardButton.Cancel).setText(tr('Cancelar'))
         botoes.accepted.connect(self._salvar)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
 
-        montar_com_painel(self, layout, 'Configurações',
-                          INSTRUCOES['configuracoes'], largura=360, altura_min=400)
+        montar_com_painel(self, layout, tr('Configurações'),
+                          instrucoes('configuracoes'), largura=360,
+                          altura_min=400)
 
         self._carregar()
 
@@ -206,7 +226,7 @@ class DialogConfiguracoes(QDialog):
         """Abre seletor de diretório para a pasta padrão de saída.
         """
         pasta = QFileDialog.getExistingDirectory(
-            self, 'Pasta de saída padrão', self.pasta_edit.text())
+            self, tr('Pasta de saída padrão'), self.pasta_edit.text())
         if pasta:
             self.pasta_edit.setText(pasta)
 
@@ -223,19 +243,27 @@ class DialogConfiguracoes(QDialog):
             self.orientacao_combo.setCurrentIndex(ORIENTACOES.index(ori))
         self.simb_combo.setCurrentIndex(
             SIMBOLOGIAS.index(ler_simbologia_padrao()))
+        i = self.idioma_combo.findData(preferencia_idioma())
+        self.idioma_combo.setCurrentIndex(max(0, i))
         self.pasta_edit.setText(ler_pasta_saida())
 
     def _salvar(self) -> None:
-        """Persiste as preferências globais escolhidas e fecha com sucesso."""
+        """Persiste as preferências globais escolhidas e fecha com sucesso.
+
+        ``idioma_mudou`` avisa quem abriu o diálogo (o plugin) que o idioma
+        efetivo mudou e o menu precisa ser reconstruído."""
         s = QgsSettings()
         s.setValue(PREFIXO + 'escala_padrao', int(self.escala_spin.value()))
         s.setValue(PREFIXO + 'folha_padrao', self.folha_combo.currentText())
         s.setValue(
             PREFIXO + 'orientacao_padrao',
-            self.orientacao_combo.currentText())
+            self.orientacao_combo.currentData())
         s.setValue(PREFIXO + 'equidistancia_padrao',
                    int(self.equi_spin.value()))
         s.setValue(PREFIXO + 'simbologia_padrao',
-                   self.simb_combo.currentText())
+                   self.simb_combo.currentData())
         s.setValue(PREFIXO + 'pasta_saida', self.pasta_edit.text())
+        antes = idioma()
+        salvar_preferencia_idioma(self.idioma_combo.currentData())
+        self.idioma_mudou = idioma() != antes
         self.accept()
