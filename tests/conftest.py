@@ -81,3 +81,8 @@ def folha():
 def geo_nucleo():
     """O mesmo geo.py que o folha.py usa (via pacote sintético)."""
     return carregar_do_nucleo('geo')
+
+
+@pytest.fixture(scope='session')
+def tipos_mapa():
+    return carregar_do_nucleo('tipos_mapa')

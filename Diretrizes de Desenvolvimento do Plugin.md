@@ -64,6 +64,10 @@
    - **Uma única camada `folha`**: criar, recriar ou ajustar a folha passa sempre por `criar_folha.aplicar_folha`, que grava o estado e **atualiza** a camada existente (marcada com a propriedade `OrIFSC/camada = folha`) em vez de adicionar outra. Cada gravação incrementa `folha_revisao` no projeto.
    - O GeoTIFF do satélite continua com o norte da quadrícula para cima e cobre o retângulo envolvente da folha girada; o OCAD/OOM gira a imagem ao abrir.
 
+12. **Tipo de mapa define os padrões do projeto**
+   - Os tipos (Sprint, Floresta, Escolar, Personalizado) ficam em `algorithms/ocad/tipos_mapa.py` (módulo puro). O tipo escolhido no Definir Local é salvo no projeto (`comum.salvar_tipo_mapa`).
+   - Precedência dos padrões: **tipo do projeto** (se tiver predefinição) → **Configurações** globais → valores do plugin. Vale para a equidistância de Gerar Curvas (`_equidistancia_padrao`) e a simbologia da exportação (`indice_simbologia_padrao`). São sempre padrões editáveis no diálogo, nunca valores forçados.
+
 ## 3. Comunicação entre módulos
 
 - `orifsc.py` chama funções/classes em `acoes/*` sob demanda (imports locais).

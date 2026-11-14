@@ -16,6 +16,7 @@ concluídos e registre aqui qualquer mudança de decisão.
 | 6 | Limite não cabe na folha | **Aumenta o papel primeiro** (A4 → A3) mantendo a escala da norma; se nem A3 couber, avisa e mostra a escala que caberia. |
 | 7 | Programas de destino | Usam todos, mas o alvo de compatibilidade é **OCAD 10** e **OpenOrienteering Mapper** (o resto abre sem erro). |
 | 8 | Folga entre o limite e a borda do papel | **5 mm** no papel. |
+| 9 | Tipo "Escolar / Parque" | **Sim**: ISSprOM, 1:2.000, equidistância 2 m, A4. |
 
 Decisões técnicas (tomadas pelo Claude, sem objeção):
 
@@ -45,16 +46,21 @@ Decisões técnicas (tomadas pelo Claude, sem objeção):
   - [x] Folga de **5 mm** no papel (decisão 8). Parte do papel escolhido e aumenta (A4 → A3); nunca diminui.
   - [x] Se nem o A3 couber: pergunta se pode usar a menor escala padrão que caberia (a escala nunca muda sozinha).
   - [x] Aceita qualquer camada de polígono (inclusive KML em graus); com feições selecionadas, usa só elas.
-- [ ] **Parte 4 — Tipos de mapa**: presets Sprint / Floresta / Personalizado.
+- [x] **Parte 4 — Tipos de mapa** (primeiro campo do Definir Local)
+  - [x] Sprint / Floresta / Escolar / Personalizado; o tipo preenche escala e papel (campos continuam editáveis).
+  - [x] Tipo salvo no projeto: Gerar Curvas sugere a equidistância do tipo e a exportação sugere a norma do tipo.
+  - [x] Último tipo usado é lembrado no próximo projeto; Personalizado e projetos sem tipo seguem as Configurações.
+  - [x] Escalas 1:2.000 e 1:3.000 entram na lista.
 - [ ] **Parte 5 — Painel assistente**: etapas com ✓ / ▶ / ⚠, avisa sem bloquear, marca etapas desatualizadas.
 - [ ] **Parte 6 — Linhas de norte magnético** como objetos no `.ocd`/`.omap`, no espaçamento da norma.
 
-Presets iniciais (parte 4 — validar com a FLORA):
+Tipos de mapa (parte 4 — em `OrIFSC/algorithms/ocad/tipos_mapa.py`):
 
 | Tipo | Norma | Escala | Equidistância | Papel |
 |---|---|---|---|---|
 | Sprint / urbano | ISSprOM 2019-2 | 1:4.000 | 2,5 m | A4 |
 | Floresta / rural | ISOM 2017-2 | 1:10.000 | 5 m | A4 |
+| Escolar / parque | ISSprOM 2019-2 | 1:2.000 | 2 m | A4 |
 | Personalizado | livre | livre | livre | livre |
 
 ## Depois da 0.2.0
@@ -76,3 +82,5 @@ Para cada um dos dois programas, com um projeto em Florianópolis (declinação 
    exportação seguinte sai com a folha nova, em pé.
 7. Ajustar ao limite (no QGIS): desenhar um limite, ajustar e conferir que a folha o
    contém com folga; testar um limite grande demais (pergunta da escala).
+8. Tipos de mapa: um projeto Escolar (1:2.000) exporta com a paleta ISSprOM e curvas
+   de 2 m com mestras a cada 10 m.

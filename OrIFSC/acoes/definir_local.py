@@ -22,9 +22,14 @@ from qgis.PyQt.QtWidgets import (
 
 from ..algorithms.ocad.folha import PAPEIS
 from ..algorithms.ocad.geo import declinacao_wmm
+from ..algorithms.ocad.tipos_mapa import (
+    PERSONALIZADO, TIPOS_MAPA, resumo, tem_predefinicao, tipo_por_id,
+)
 from .painel import montar_com_painel, INSTRUCOES
 
 ESCALAS = [
+    ('1:2.000', 2000),
+    ('1:3.000', 3000),
     ('1:4.000', 4000),
     ('1:5.000', 5000),
     ('1:7.500', 7500),
@@ -83,6 +88,15 @@ class DialogDefinirLocal(QDialog):
         layout = QVBoxLayout()
         form = QFormLayout()
         layout.addLayout(form)
+
+        self.tipo_combo = QComboBox()
+        for tipo in TIPOS_MAPA:
+            self.tipo_combo.addItem(tipo.rotulo, tipo.id)
+        form.addRow('Tipo de mapa:', self.tipo_combo)
+        self.tipo_resumo = QLabel()
+        self.tipo_resumo.setWordWrap(True)
+        self.tipo_resumo.setStyleSheet('color: #555; font-style: italic;')
+        form.addRow('', self.tipo_resumo)
 
         self.coord_input = QLineEdit()
         self.coord_input.setPlaceholderText('Ex: -27.5926, -48.5431')
@@ -150,6 +164,8 @@ class DialogDefinirLocal(QDialog):
                           INSTRUCOES['definir_local'])
 
         self._aplicar_padroes()
+        self._selecionar_tipo_inicial()
+        self.tipo_combo.currentIndexChanged.connect(self._aplicar_tipo)
         self._atualizar_preview()
         self._prefill_coord_do_canvas()
         self._atualizar_declinacao()
@@ -175,6 +191,41 @@ class DialogDefinirLocal(QDialog):
             self.folha_combo.setCurrentIndex(nomes.index(folha))
         self.orientacao_combo.setCurrentIndex(
             1 if ler_orientacao_padrao() == 'Retrato' else 0)
+
+    def tipo(self):
+        """``TipoMapa`` selecionado."""
+        return tipo_por_id(self.tipo_combo.currentData())
+
+    def _selecionar_tipo_inicial(self) -> None:
+        """Pré-seleciona o último tipo usado (Personalizado se nenhum) e,
+        se ele tiver predefinição, já preenche escala e papel."""
+        try:
+            from .configuracoes import ler_tipo_mapa_ultimo
+            ultimo = ler_tipo_mapa_ultimo()
+        except Exception:
+            ultimo = PERSONALIZADO
+        indice = self.tipo_combo.findData(ultimo)
+        self.tipo_combo.setCurrentIndex(
+            indice if indice >= 0 else self.tipo_combo.findData(PERSONALIZADO))
+        self._aplicar_tipo()
+
+    def _aplicar_tipo(self) -> None:
+        """Preenche escala e papel com a predefinição do tipo (a orientação
+        fica como está). Os campos continuam editáveis; o tipo segue
+        valendo para a norma e a equidistância dos passos seguintes."""
+        tipo = self.tipo()
+        self.tipo_resumo.setText(resumo(tipo))
+        if not tem_predefinicao(tipo):
+            return
+        for i, (_, valor) in enumerate(ESCALAS):
+            if valor == tipo.escala:
+                self.escala_combo.setCurrentIndex(i)
+                break
+        else:
+            self.escala_combo.setCurrentIndex(len(ESCALAS) - 1)
+            self.escala_custom.setValue(tipo.escala)
+        nomes = [nome for nome, _, _ in FOLHAS]
+        self.folha_combo.setCurrentIndex(nomes.index(tipo.papel))
 
     def _prefill_coord_do_canvas(self) -> None:
         """Pré-preenche o campo com o centro da vista atual (em Lat,Lon)."""
@@ -299,6 +350,13 @@ class DialogDefinirLocal(QDialog):
         QgsProject.instance().setCrs(crs_utm)
         self.iface.mapCanvas().setDestinationCrs(crs_utm)
         from .criar_folha import aplicar_folha
+        from .comum import salvar_tipo_mapa
+        salvar_tipo_mapa(self.tipo().id)
+        try:
+            from .configuracoes import salvar_tipo_mapa_ultimo
+            salvar_tipo_mapa_ultimo(self.tipo().id)
+        except Exception:  # nosec B110 - lembrar o tipo é conveniência
+            pass
         info = aplicar_folha(self.iface, epsg, pt_utm.x(), pt_utm.y(),
                              larg_mm, alt_mm, escala, declinacao, origem,
                              parent=self)

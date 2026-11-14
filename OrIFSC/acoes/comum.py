@@ -119,6 +119,19 @@ def ler_folha() -> Optional[Tuple[int, float, float, float, float]]:
     return epsg, x0, y0, x1, y1
 
 
+def salvar_tipo_mapa(tipo_id: str) -> None:
+    """Grava o tipo de mapa escolhido no Definir Local (sprint, floresta,
+    escolar ou personalizado)."""
+    QgsProject.instance().writeEntry(ESCOPO, 'tipo_mapa', str(tipo_id))
+
+
+def ler_tipo_mapa() -> Any:
+    """``TipoMapa`` do projeto, ou None (projeto sem tipo salvo)."""
+    from ..algorithms.ocad.tipos_mapa import tipo_por_id
+    tipo_id, ok = QgsProject.instance().readEntry(ESCOPO, 'tipo_mapa', '')
+    return tipo_por_id(tipo_id) if ok else None
+
+
 def projeto_configurado() -> bool:
     """True se o Passo 2 (Definir Local e Criar Folha) já foi executado."""
     return ler_folha() is not None

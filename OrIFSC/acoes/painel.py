@@ -239,10 +239,14 @@ def montar_com_painel(
 INSTRUCOES = {
     'definir_local': (
         _passos([
+            ('Escolha o tipo de mapa',
+             '<b>Sprint</b>, <b>Floresta</b> ou <b>Escolar</b> já preenchem '
+             'escala e papel, e definem a norma e a equidistância dos passos '
+             'seguintes. <b>Personalizado</b> deixa tudo livre.'),
             ('Cole a coordenada',
              'Lat, Lon do Google Maps — o campo já vem com o centro da vista atual.'),
-            ('Escolha escala e folha',
-             'Defina a escala e o tamanho da folha (A3 / A4 / A5).'),
+            ('Confira escala e folha',
+             'Ajuste a escala e o tamanho da folha (A3 / A4 / A5) se quiser.'),
             ('Crie a folha',
              'Confira a <b>área no terreno</b> e clique em <b>Criar Folha</b>.'),
         ])

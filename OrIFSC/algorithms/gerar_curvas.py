@@ -29,11 +29,21 @@ EQUIDISTANCIA_MAX = 100.0
 
 
 def _equidistancia_padrao() -> float:
-    """Equidistância padrão definida em OrIFSC → Configurações (fallback 5 m).
+    """Equidistância padrão: a do tipo de mapa do projeto (Sprint 2,5 m,
+    Floresta 5 m, Escolar 2 m); sem tipo ou Personalizado, a definida em
+    OrIFSC → Configurações (fallback 5 m).
 
-    Aceita decimais (ex.: 2,5 m, comum em sprint) e fica limitada à faixa do
-    parâmetro para não invalidar o diálogo com um valor salvo fora dela.
+    Aceita decimais e fica limitada à faixa do parâmetro para não invalidar
+    o diálogo com um valor salvo fora dela.
     """
+    try:
+        from ..acoes.comum import ler_tipo_mapa
+        from .ocad.tipos_mapa import tem_predefinicao
+        tipo = ler_tipo_mapa()
+        if tem_predefinicao(tipo):
+            return float(tipo.equidistancia)
+    except Exception:  # nosec B110 - sem projeto/tipo, vale a preferência
+        pass
     try:
         from qgis.core import QgsSettings
         valor = float(QgsSettings().value('OrIFSC/equidistancia_padrao', 5))
