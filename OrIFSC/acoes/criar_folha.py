@@ -1,19 +1,22 @@
 """Criação da camada 'folha' (Definir Local e Criar Folha).
 
 Cria a camada 'folha' (retângulo do tamanho real da folha na escala definida no
-Passo 2), com borda magenta e sem preenchimento. Chamada pelo diálogo de
-Definir Local logo após salvar o retângulo no projeto.
+Passo 2), com borda magenta e sem preenchimento. A folha já nasce girada para o
+norte magnético, para ficar em pé no papel do OCAD/OOM; projetos da 0.1.x (sem
+grivação salva) continuam com o retângulo alinhado à quadrícula UTM. Chamada
+pelo diálogo de Definir Local logo após salvar a folha no projeto.
 """
 from typing import Any, Optional
 
 from qgis.core import (
-    QgsVectorLayer, QgsFeature, QgsGeometry, QgsRectangle, QgsProject,
-    QgsSymbol, QgsSingleSymbolRenderer,
+    QgsVectorLayer, QgsFeature, QgsGeometry, QgsPointXY, QgsRectangle,
+    QgsProject, QgsSymbol, QgsSingleSymbolRenderer,
 )
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QColor
 
-from .comum import ler_folha, avisar_projeto_nao_configurado
+from .comum import (ler_folha, ler_folha_girada,
+                    avisar_projeto_nao_configurado)
 
 
 def criar_folha(iface: Any, parent: Any = None) -> Optional[QgsVectorLayer]:
@@ -36,9 +39,16 @@ def criar_folha(iface: Any, parent: Any = None) -> Optional[QgsVectorLayer]:
         return None
     epsg, x0, y0, x1, y1 = estado
 
+    girada = ler_folha_girada()
+    if girada is not None:
+        anel = [QgsPointXY(e, n) for e, n in girada['cantos']]
+        geometria = QgsGeometry.fromPolygonXY([anel + [anel[0]]])
+    else:
+        geometria = QgsGeometry.fromRect(QgsRectangle(x0, y0, x1, y1))
+
     folha = QgsVectorLayer(f'Polygon?crs=EPSG:{epsg}', 'folha', 'memory')
     feat = QgsFeature()
-    feat.setGeometry(QgsGeometry.fromRect(QgsRectangle(x0, y0, x1, y1)))
+    feat.setGeometry(geometria)
     folha.dataProvider().addFeatures([feat])
     folha.updateExtents()
 

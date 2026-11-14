@@ -18,7 +18,8 @@
   - `utils.py`: utilitários comuns — ocultar algoritmos da toolbox e cache persistente (`dir_cache`/`podar_cache`).
 - **Núcleo de exportação OCAD/OOM** (`OrIFSC\algorithms\ocad\*.py`):
   - modelo comum (`projeto.py`);
-  - cálculos geográficos (`geo.py`);
+  - cálculos geográficos (`geo.py`): convergência, grivação e geometria da folha girada;
+  - declinação magnética offline (`wmm.py`): World Magnetic Model com os coeficientes oficiais em `recursos/wmm/` — módulo puro, sem QGIS;
   - escritores de arquivo (`ocd.py`, `omap.py`);
   - simbologia oficial embutida (`simbologia.py`): injeção do projeto nos
     symbol sets do OOM (`recursos/simbologias/`) — módulo puro, sem QGIS.
@@ -54,6 +55,13 @@
    - Para o `.ocd`, a paleta vem de um **arquivo doador OCD v9/v10** gerado uma única vez exportando o symbol set no próprio OOM (v9 é normalizado para v10 no cabeçalho). **Arquivos de simbologia do OCAD não podem ser redistribuídos** — o doador tem que derivar do OOM. Se o doador não existir, a exportação degrada com aviso para o símbolo único (nunca falha por isso).
    - Curvas mestras: elevação (ELEV) múltipla de 5x a equidistância → símbolo 102; a equidistância é **deduzida dos próprios dados** (menor diferença entre elevações distintas), sem depender de configuração.
    - Ao atualizar os symbol sets para uma nova versão do OOM: baixar da tag correspondente, regenerar os doadores `.ocd` e atualizar `PROVENIENCIA.txt`.
+
+11. **Folha orientada ao norte magnético**
+   - O papel do OCAD/OOM é orientado ao norte magnético (grivação = declinação − convergência meridiana). Por isso a folha **nasce girada** pela grivação no "Definir Local" (`geo.cantos_folha`), e não alinhada à quadrícula UTM — senão ela aparece inclinada no OCAD, com cantos vazios (problema da 0.1.x).
+   - A declinação é calculada **uma vez, na criação da folha** (WMM offline ou valor manual) e salva no projeto (`comum.salvar_declinacao`); a exportação usa **essa mesma** declinação por padrão. Exportar com outra declinação gera aviso, porque a folha ficaria inclinada pela diferença.
+   - `geo.papel_para_mundo` reproduz exatamente o `QTransform` de `ProjetoOcad`; qualquer mudança em um exige a mesma mudança no outro (o teste `tests/test_folha_girada.py` confere a equivalência quando o PyQt5 está disponível).
+   - Projetos da 0.1.x (sem `folha_grivacao` salvo) continuam funcionando com a folha alinhada à quadrícula; a exportação avisa e sugere refazer o "Definir Local".
+   - O GeoTIFF do satélite continua com o norte da quadrícula para cima e cobre o retângulo envolvente da folha girada; o OCAD/OOM gira a imagem ao abrir.
 
 ## 3. Comunicação entre módulos
 
@@ -113,5 +121,5 @@
 
 - **OCAD 10 (32 bits)**: lê apenas TIFF RGB de 3 bandas, LZW ou sem compressão, organização em strips (`TILED=NO`) e arquivo < 2 GB; sem canal alpha. O limite `MAX_PX=16384` por lado em `exportar_ocad.py` deriva disso — é limite técnico, não ajuste de qualidade.
 - **Tiles do Google (`mt*.google.com`)**: o download automatizado (scraping de endpoint não oficial), o salvamento offline em GeoTIFF e a vetorização de mapa por cima da imagem violam os Termos de Serviço do Google Maps. **Atribuição/referência não autoriza esses usos** — a restrição é contratual, não de crédito. Riscos, em ordem realista: sinalização/remoção do plugin no repositório oficial do QGIS; bloqueio técnico do endpoint pelo Google (quebra silenciosa da funcionalidade); ação legal contra usuários finais (teórico nessa escala). **Decisão registrada (julho/2026)**: manter a funcionalidade com o risco documentado; preferir e promover a ortofoto do SIG@SC como fundo quando a área for em Santa Catarina; não expandir o uso do Google em novas funcionalidades.
-- **NOAA/WMM (declinação)**: usa a chave pública de demonstração; se falhar, degrada para o valor manual informado no diálogo (comportamento intencional).
+- **WMM (declinação)**: calculada offline com o WMM2025 embutido (`recursos/wmm/WMM2025.COF`, domínio público), válido até 31/12/2029. Fora da validade o valor ainda é calculado, com aviso ao usuário. **Atualizar para o WMM2030** quando for publicado (dez/2029) — ver `recursos/wmm/PROVENIENCIA.txt`. A antiga consulta à API da NOAA (chave de demonstração) foi removida.
 - **SIG@SC**: serviço lento/instável; toda chamada precisa de timeout e mensagem clara ao usuário, sem fallback implícito para outra fonte.

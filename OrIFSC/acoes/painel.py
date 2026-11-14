@@ -248,7 +248,9 @@ INSTRUCOES = {
         ])
         + _esp()
         + _dica('O projeto é configurado em <b>UTM</b> e a camada '
-                '<b>folha</b> é criada.')
+                '<b>folha</b> nasce girada para o <b>norte magnético</b> '
+                '(declinação calculada sem internet) — no OCAD ela fica '
+                'em pé.')
     ),
     'configuracoes': (
         _secao('Padrões globais')
@@ -293,7 +295,7 @@ INSTRUCOES = {
         + _secao('Já vem configurado')
         + _bullets([
             '<b>Georreferência</b> (UTM, escala e grade) e <b>declinação '
-            'magnética</b> (automática via WMM/NOAA, ou manual).',
+            'magnética</b> (a mesma que girou a folha no Definir Local).',
             'O <b>satélite</b> como mapa de fundo georreferenciado.',
             'As <b>curvas de nível</b> já como objetos de linha '
             '(mestras no símbolo 102 a cada 5ª equidistância).',

@@ -50,3 +50,8 @@ def omap():
 def simbologia():
     return carregar_modulo('orifsc_simbologia',
                            'algorithms', 'ocad', 'simbologia.py')
+
+
+@pytest.fixture(scope='session')
+def wmm():
+    return carregar_modulo('orifsc_wmm', 'algorithms', 'ocad', 'wmm.py')

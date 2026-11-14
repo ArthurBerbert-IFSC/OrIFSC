@@ -1,36 +1,21 @@
 """Cálculos geográficos para a exportação: declinação magnética, convergência
-meridiana (UTM) e o código OCD de grade/zona.
+meridiana (UTM), geometria da folha girada e o código OCD de grade/zona.
 
-A declinação vem do modelo magnético mundial (WMM) via API pública da NOAA. Se a
-chamada falhar (sem internet, serviço fora), o chamador usa o valor manual.
+A declinação vem do World Magnetic Model calculado offline (``wmm.py``, com os
+coeficientes embutidos em ``recursos/wmm``) — sem internet e sem chave de API.
 """
-import json
+import datetime
 import math
-from typing import Optional, Tuple
-
-_NOAA_URL = (
-    'https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination'
-    '?lat1={lat}&lon1={lon}&key=zNEw7&resultFormat=json'
-    '&startYear={ano}&startMonth={mes}&startDay={dia}'
-)
+from typing import List, Tuple
 
 
-def declinacao_noaa(
-        lat: float,
-        lon: float,
-        ano: int,
-        mes: int,
-        dia: int) -> Optional[float]:
-    """Declinação magnética (graus, leste +) pela NOAA/WMM, ou None se falhar."""
-    # Import tardio: mantém o resto do módulo (cálculos puros) importável e
-    # testável fora do QGIS.
-    from ...rede import baixar_bytes
-    url = _NOAA_URL.format(lat=lat, lon=lon, ano=ano, mes=mes, dia=dia)
-    try:
-        dados = json.loads(baixar_bytes(url).decode('utf-8'))
-        return float(dados['result'][0]['declination'])
-    except Exception:
-        return None
+def declinacao_wmm(lat: float, lon: float,
+                   data: datetime.date) -> Tuple[float, bool]:
+    """(declinação em graus, leste +; dentro_da_validade) pelo WMM offline."""
+    # Import tardio: mantém este módulo carregável isolado nos testes (que o
+    # leem direto do arquivo, fora do pacote).
+    from .wmm import declinacao_na_data
+    return declinacao_na_data(lat, lon, data)
 
 
 def convergencia_utm(lat_deg: float, lon_deg: float, lon0_deg: float) -> float:
@@ -42,6 +27,46 @@ def convergencia_utm(lat_deg: float, lon_deg: float, lon0_deg: float) -> float:
     dlon = math.radians(lon_deg - lon0_deg)
     lat = math.radians(lat_deg)
     return math.degrees(math.atan(math.tan(dlon) * math.sin(lat)))
+
+
+def grivacao(declinacao: float, convergencia: float) -> float:
+    """Ângulo entre o norte da quadrícula UTM e o norte magnético (graus).
+
+    É o ângulo com que o papel do OCAD/OOM fica girado em relação à grade;
+    positivo = norte magnético a leste da grade (sentido horário).
+    """
+    return declinacao - convergencia
+
+
+def papel_para_mundo(x_mm: float, y_mm: float, ref_e: float, ref_n: float,
+                     escala: int, grivacao_graus: float) -> Tuple[float, float]:
+    """Ponto do papel (mm, y para baixo, origem no centro) → UTM (metros).
+
+    Reproduz exatamente o ``QTransform`` de ``ProjetoOcad`` (convenção do
+    OpenOrienteering Mapper): translate(ref) · rotate(−grivação) ·
+    scale(s, −s), com s = escala/1000 m por mm. O topo do papel aponta para
+    o norte magnético.
+    """
+    s = escala / 1000.0
+    g = math.radians(grivacao_graus)
+    xs, ys = s * x_mm, -s * y_mm
+    return (ref_e + xs * math.cos(g) + ys * math.sin(g),
+            ref_n - xs * math.sin(g) + ys * math.cos(g))
+
+
+def cantos_folha(ref_e: float, ref_n: float, larg_mm: float, alt_mm: float,
+                 escala: int, grivacao_graus: float) -> List[Tuple[float, float]]:
+    """Os 4 cantos (UTM) de uma folha centrada em ``ref`` e girada para o
+    norte magnético: superior-esquerdo, superior-direito, inferior-direito,
+    inferior-esquerdo.
+
+    No OCAD/OOM essa folha aparece em pé, alinhada ao papel. Com grivação
+    zero é o retângulo alinhado à quadrícula UTM (comportamento da 0.1.x).
+    """
+    meia_l, meia_a = larg_mm / 2.0, alt_mm / 2.0
+    return [papel_para_mundo(x, y, ref_e, ref_n, escala, grivacao_graus)
+            for x, y in ((-meia_l, -meia_a), (meia_l, -meia_a),
+                         (meia_l, meia_a), (-meia_l, meia_a))]
 
 
 def meridiano_central(zona: int) -> int:

@@ -168,12 +168,14 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             options=OPCOES_SIMBOLOGIA,
             defaultValue=self._simbologia_padrao()))
         self.addParameter(QgsProcessingParameterBoolean(
-            self.DECL_AUTO, 'Calcular declinação magnética automaticamente (WMM/NOAA)',
+            self.DECL_AUTO,
+            'Usar a declinação magnética da folha (calculada em "Definir '
+            'Local")',
             defaultValue=True))
         self.addParameter(QgsProcessingParameterNumber(
             self.DECL_MANUAL,
-            'Declinação magnética manual (graus, leste +; usada se o automático '
-            'estiver desmarcado ou falhar)',
+            'Declinação magnética manual (graus, leste +; usada só com a '
+            'opção acima desmarcada)',
             type=Qgis.ProcessingNumberParameterType.Double, defaultValue=0.0,
             minValue=-90.0, maxValue=90.0))
         self.addParameter(QgsProcessingParameterEnum(
@@ -205,7 +207,6 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             classificar_curvas, escrever_ocd_v10, escrever_omap,
             escrever_omap_com_simbologia,
         )
-        from .ocad.geo import declinacao_noaa
         from .ocad.projeto import centro_latlon
 
         folha = self.parameterAsSource(parameters, self.FOLHA, context)
@@ -290,19 +291,8 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                     'normal (101).')
         feedback.setProgress(70)
 
-        declinacao = decl_manual
-        if decl_auto:
-            lat, lon = centro_latlon(epsg, (rect[0] + rect[2]) / 2,
-                                     (rect[1] + rect[3]) / 2)
-            hoje = datetime.date.today()
-            feedback.pushInfo('Consultando declinação magnética (NOAA/WMM)...')
-            valor = declinacao_noaa(lat, lon, hoje.year, hoje.month, hoje.day)
-            if valor is None:
-                feedback.pushWarning(
-                    'Não foi possível obter a declinação automática; usando o '
-                    f'valor manual ({decl_manual:.2f}°).')
-            else:
-                declinacao = valor
+        declinacao = self._declinacao(
+            decl_auto, decl_manual, epsg, rect, centro_latlon, feedback)
         feedback.pushInfo(f'Declinação usada: {declinacao:.2f}°.')
         feedback.setProgress(80)
 
@@ -372,6 +362,51 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             raise QgsProcessingException(
                 f'CRS {authid} não é WGS84/UTM. Rode "Definir Local e Criar Folha".')
         return epsg
+
+    def _declinacao(self, decl_auto: bool, decl_manual: float, epsg: int,
+                    rect: Tuple[float, float, float, float],
+                    centro_latlon: Callable, feedback: Any) -> float:
+        """Declinação da exportação, coerente com a rotação da folha.
+
+        A folha é girada no "Definir Local" pela declinação daquele momento;
+        exportar com outro valor faria a folha aparecer inclinada no OCAD.
+        Por isso o padrão é a declinação salva no projeto. Projetos da 0.1.x
+        (sem declinação salva) calculam pelo WMM offline na hora, como antes.
+        """
+        from ..acoes.comum import ler_declinacao, ler_folha_girada
+        salva = ler_declinacao()
+        if ler_folha_girada() is None:
+            feedback.pushWarning(
+                'Esta folha foi criada numa versão anterior do OrIFSC, '
+                'alinhada à quadrícula UTM: no OCAD/OOM ela aparece '
+                'inclinada. Rode "Definir Local e Criar Folha" de novo para '
+                'criar a folha girada para o norte magnético.')
+
+        if not decl_auto:
+            if salva is not None and abs(decl_manual - salva[0]) > 0.01:
+                feedback.pushWarning(
+                    f'A folha foi girada para a declinação {salva[0]:.2f}°; '
+                    f'exportando com {decl_manual:.2f}° ela vai aparecer '
+                    f'inclinada {abs(decl_manual - salva[0]):.2f}° no OCAD. '
+                    'Para mudar a declinação, refaça "Definir Local".')
+            return decl_manual
+
+        if salva is not None:
+            feedback.pushInfo(
+                f'Declinação da folha: {salva[0]:.2f}° ({salva[1]}).')
+            return salva[0]
+
+        from .ocad.geo import declinacao_wmm
+        lat, lon = centro_latlon(epsg, (rect[0] + rect[2]) / 2,
+                                 (rect[1] + rect[3]) / 2)
+        valor, valido = declinacao_wmm(lat, lon, datetime.date.today())
+        feedback.pushInfo('Declinação calculada agora pelo modelo WMM '
+                          f'(sem internet): {valor:.2f}°.')
+        if not valido:
+            feedback.pushWarning(
+                'O modelo magnético embutido está fora da validade; confira '
+                'a declinação e atualize o plugin.')
+        return valor
 
     def _ler_escala(self) -> int:
         """Lê escala persistida no estado do projeto.
