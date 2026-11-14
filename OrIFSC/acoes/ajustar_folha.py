@@ -1,12 +1,15 @@
-"""Ajustar Folha: mover a folha no mapa e trocar escala, papel e orientação.
+"""Ajustar Folha: mover a folha no mapa, trocar escala, papel e orientação,
+ou encaixar a folha num limite.
 
 Diálogo não modal com prévia ao vivo: um contorno laranja mostra no mapa a
 folha que vai ficar (sempre girada para o norte magnético). "Mover no mapa…"
 ativa uma ferramenta em que o contorno segue o mouse; um clique fixa o novo
-centro. Ao aplicar, a camada 'folha' existente é atualizada (sem duplicar) e o
-estado do projeto é regravado por ``criar_folha.aplicar_folha``.
+centro. "Ajustar ao limite" calcula papel, orientação e centro que contêm uma
+camada de polígono (``folha.ajustar_ao_limite``). Ao aplicar, a camada 'folha'
+existente é atualizada (sem duplicar) e o estado do projeto é regravado por
+``criar_folha.aplicar_folha``.
 """
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from qgis.core import (
     QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsGeometry,
@@ -17,15 +20,17 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (
     QDialog, QFormLayout, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QPushButton, QDialogButtonBox,
+    QSpinBox, QPushButton, QDialogButtonBox, QMessageBox,
 )
 
 from ..algorithms.ocad.folha import (
-    PAPEIS, area_terreno_m, dimensoes_papel, identificar_papel,
+    PAPEIS, ajustar_ao_limite, area_terreno_m, dimensoes_papel,
+    escala_sugerida, identificar_papel,
 )
 from ..algorithms.ocad.geo import cantos_folha
-from .comum import ler_escala, ler_folha, ler_folha_girada, tem_camada_curvas
-from .criar_folha import aplicar_folha, calcular_orientacao
+from .comum import (camadas_poligono, ler_escala, ler_folha,
+                    ler_folha_girada, tem_camada_curvas)
+from .criar_folha import aplicar_folha, calcular_orientacao, camada_folha
 from .definir_local import ESCALAS, _graus, mensagem_orientacao
 from .painel import montar_com_painel, INSTRUCOES
 
@@ -40,6 +45,11 @@ def _banda(canvas: Any) -> QgsRubberBand:
     banda.setWidth(2)
     banda.setLineStyle(Qt.PenStyle.DashLine)
     return banda
+
+
+def _milhar(valor: int) -> str:
+    """4000 → '4.000' (separador de milhar pt-BR)."""
+    return f'{int(valor):,}'.replace(',', '.')
 
 
 def _geometria(cantos) -> QgsGeometry:
@@ -149,6 +159,15 @@ class DialogAjustarFolha(QDialog):
         self.orientacao_label.setStyleSheet('color: #555; font-style: italic;')
         form.addRow('Norte magnético:', self.orientacao_label)
 
+        linha_limite = QHBoxLayout()
+        self.limite_combo = QComboBox()
+        self.botao_limite = QPushButton('Ajustar')
+        self.botao_limite.clicked.connect(self.ajustar_ao_limite)
+        linha_limite.addWidget(self.limite_combo, 1)
+        linha_limite.addWidget(self.botao_limite)
+        form.addRow('Ajustar ao limite:', linha_limite)
+        self._preencher_limites()
+
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                   QDialogButtonBox.StandardButton.Cancel)
         botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Aplicar')
@@ -207,6 +226,110 @@ class DialogAjustarFolha(QDialog):
             'A4', estado['alt_mm'] > estado['larg_mm'])
         self.papel_combo.setCurrentIndex([p[0] for p in PAPEIS].index(nome))
         self.orientacao_combo.setCurrentIndex(1 if retrato else 0)
+
+    def _preencher_limites(self) -> None:
+        """Camadas de polígono que podem servir de limite (menos a folha);
+        pré-seleciona a que se chama 'limite'."""
+        folha = camada_folha()
+        camadas = [c for c in camadas_poligono()
+                   if folha is None or c.id() != folha.id()]
+        self.limite_combo.clear()
+        for c in camadas:
+            self.limite_combo.addItem(c.name(), c.id())
+        nomes = [c.name().lower() for c in camadas]
+        for i, nome in enumerate(nomes):
+            if 'limite' in nome:
+                self.limite_combo.setCurrentIndex(i)
+                break
+        tem = bool(camadas)
+        self.limite_combo.setEnabled(tem)
+        self.botao_limite.setEnabled(tem)
+        if not tem:
+            self.limite_combo.addItem('(nenhuma camada de polígono)')
+            self.botao_limite.setToolTip(
+                'Desenhe o limite em Início → Camada de Limite ou importe '
+                'um KML com o contorno da área.')
+
+    def _pontos_limite(self, camada: Any) -> List[Tuple[float, float]]:
+        """Vértices do limite no CRS da folha (só as feições selecionadas,
+        se houver seleção)."""
+        tr = None
+        if camada.crs() != self.crs_folha:
+            tr = QgsCoordinateTransform(camada.crs(), self.crs_folha,
+                                        QgsProject.instance())
+        feicoes = (camada.getSelectedFeatures() if camada.selectedFeatureCount()
+                   else camada.getFeatures())
+        pontos = []
+        for f in feicoes:
+            geom = QgsGeometry(f.geometry())
+            if geom.isEmpty():
+                continue
+            if tr is not None:
+                geom.transform(tr)
+            pontos.extend((v.x(), v.y()) for v in geom.vertices())
+        return pontos
+
+    def _definir_escala(self, escala: int) -> None:
+        for i, (_, valor) in enumerate(ESCALAS):
+            if valor == escala:
+                self.escala_combo.setCurrentIndex(i)
+                return
+        self.escala_combo.setCurrentIndex(len(ESCALAS) - 1)
+        self.escala_custom.setValue(escala)
+
+    def ajustar_ao_limite(self) -> None:
+        """Encaixa a folha na camada de limite escolhida (com 5 mm de folga).
+
+        Aumenta o papel se preciso, nunca muda a escala sozinho: se nem o
+        maior papel couber, pergunta se pode usar a escala que caberia.
+        """
+        camada = QgsProject.instance().mapLayer(
+            self.limite_combo.currentData() or '')
+        pontos = self._pontos_limite(camada) if camada is not None else []
+        if not pontos:
+            self.iface.messageBar().pushMessage(
+                'OrIFSC', 'A camada de limite escolhida não tem polígonos.',
+                level=Qgis.MessageLevel.Warning, duration=6)
+            return
+        escala = self._escala()
+        centro_e = (min(e for e, _ in pontos) + max(e for e, _ in pontos)) / 2
+        centro_n = (min(n for _, n in pontos) + max(n for _, n in pontos)) / 2
+        griv = calcular_orientacao(self.epsg, centro_e, centro_n)['grivacao']
+        papel = self.papel_combo.currentText()
+        ajuste = ajustar_ao_limite(pontos, escala, griv, papel)
+        if not ajuste.cabe:
+            sugerida = escala_sugerida(
+                ajuste.escala_minima, [v for _, v in ESCALAS if v > 0])
+            resposta = QMessageBox.question(
+                self, 'OrIFSC — Ajustar ao limite',
+                f'O limite não cabe numa folha {ajuste.papel} na escala '
+                f'1:{_milhar(escala)}, nem com o papel maior.\n\nEle caberia '
+                f'em {ajuste.papel} na escala 1:{_milhar(sugerida)}. Lembre que '
+                'a escala de competição é definida pela norma.\n\nUsar '
+                f'1:{_milhar(sugerida)}?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if resposta != QMessageBox.StandardButton.Yes:
+                return
+            self._definir_escala(sugerida)
+            ajuste = ajustar_ao_limite(pontos, sugerida, griv, papel)
+            if not ajuste.cabe:
+                return
+        self.papel_combo.setCurrentIndex(
+            [p[0] for p in PAPEIS].index(ajuste.papel))
+        self.orientacao_combo.setCurrentIndex(1 if ajuste.retrato else 0)
+        self.ref_e, self.ref_n = ajuste.ref_e, ajuste.ref_n
+        self.orientacao = calcular_orientacao(self.epsg, self.ref_e,
+                                              self.ref_n)
+        self._atualizar_previa()
+        escala_fmt = _milhar(self._escala())
+        self.iface.messageBar().pushMessage(
+            'OrIFSC',
+            f'Folha encaixada no limite: {ajuste.papel} '
+            f'{"retrato" if ajuste.retrato else "paisagem"}, escala '
+            f'1:{escala_fmt}. Confira o contorno laranja e clique em '
+            'Aplicar.',
+            level=Qgis.MessageLevel.Info, duration=8)
 
     def _escala(self) -> int:
         valor = ESCALAS[self.escala_combo.currentIndex()][1]

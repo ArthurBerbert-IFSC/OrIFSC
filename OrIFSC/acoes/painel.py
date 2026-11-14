@@ -259,6 +259,11 @@ INSTRUCOES = {
             ('Mova a folha',
              'Em <b>Mover no mapa…</b> o contorno segue o mouse; clique para '
              'fixar (botão direito ou Esc cancela).'),
+            ('Ou ajuste ao limite',
+             'Escolha a camada do limite e clique em <b>Ajustar</b>: o plugin '
+             'acha papel, orientação e posição que cabem, com 5 mm de folga. '
+             'Se precisar, aumenta o papel — a escala só muda se você '
+             'aceitar.'),
             ('Aplique',
              'A camada <b>folha</b> é atualizada, sempre girada para o norte '
              'magnético.'),

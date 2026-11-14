@@ -54,6 +54,18 @@ def papel_para_mundo(x_mm: float, y_mm: float, ref_e: float, ref_n: float,
             ref_n - xs * math.sin(g) + ys * math.cos(g))
 
 
+def mundo_para_papel(e: float, n: float, ref_e: float, ref_n: float,
+                     escala: int, grivacao_graus: float) -> Tuple[float, float]:
+    """Inverso de ``papel_para_mundo``: UTM (metros) → papel (mm, y para
+    baixo, origem em ``ref``)."""
+    s = escala / 1000.0
+    g = math.radians(grivacao_graus)
+    de, dn = e - ref_e, n - ref_n
+    xs = de * math.cos(g) - dn * math.sin(g)
+    ys = de * math.sin(g) + dn * math.cos(g)
+    return xs / s, -ys / s
+
+
 def cantos_folha(ref_e: float, ref_n: float, larg_mm: float, alt_mm: float,
                  escala: int, grivacao_graus: float) -> List[Tuple[float, float]]:
     """Os 4 cantos (UTM) de uma folha centrada em ``ref`` e girada para o

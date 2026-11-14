@@ -15,6 +15,7 @@ concluídos e registre aqui qualquer mudança de decisão.
 | 5 | Publicação | **Tudo numa versão só (0.2.0)**, implementada por partes com um commit por parte. |
 | 6 | Limite não cabe na folha | **Aumenta o papel primeiro** (A4 → A3) mantendo a escala da norma; se nem A3 couber, avisa e mostra a escala que caberia. |
 | 7 | Programas de destino | Usam todos, mas o alvo de compatibilidade é **OCAD 10** e **OpenOrienteering Mapper** (o resto abre sem erro). |
+| 8 | Folga entre o limite e a borda do papel | **5 mm** no papel. |
 
 Decisões técnicas (tomadas pelo Claude, sem objeção):
 
@@ -39,7 +40,11 @@ Decisões técnicas (tomadas pelo Claude, sem objeção):
   - [x] Declinação e convergência recalculadas no novo lugar (valor manual é mantido).
   - [x] A camada `folha` é atualizada no lugar, nunca duplicada (inclusive ao rodar o Definir Local de novo); projetos 0.1.x são convertidos para a folha girada ao ajustar.
   - [x] Contador de revisão da folha no projeto (base para as etapas "desatualizadas" da parte 5).
-- [ ] **Parte 3 — Ajustar ao limite**: calcula orientação/papel/posição que cabem no limite (regra da decisão 6).
+- [x] **Parte 3 — Ajustar ao limite** (no Ajustar Folha: "Ajustar ao limite: [camada] [Ajustar]")
+  - [x] Orientação pela proporção do limite medido no papel (já girado para o norte magnético); centro no meio do limite.
+  - [x] Folga de **5 mm** no papel (decisão 8). Parte do papel escolhido e aumenta (A4 → A3); nunca diminui.
+  - [x] Se nem o A3 couber: pergunta se pode usar a menor escala padrão que caberia (a escala nunca muda sozinha).
+  - [x] Aceita qualquer camada de polígono (inclusive KML em graus); com feições selecionadas, usa só elas.
 - [ ] **Parte 4 — Tipos de mapa**: presets Sprint / Floresta / Personalizado.
 - [ ] **Parte 5 — Painel assistente**: etapas com ✓ / ▶ / ⚠, avisa sem bloquear, marca etapas desatualizadas.
 - [ ] **Parte 6 — Linhas de norte magnético** como objetos no `.ocd`/`.omap`, no espaçamento da norma.
@@ -69,3 +74,5 @@ Para cada um dos dois programas, com um projeto em Florianópolis (declinação 
 5. Projeto antigo (folha criada na 0.1.x) ainda exporta e abre.
 6. Ajustar Folha (no QGIS): mover, trocar escala/papel/orientação e conferir que a
    exportação seguinte sai com a folha nova, em pé.
+7. Ajustar ao limite (no QGIS): desenhar um limite, ajustar e conferir que a folha o
+   contém com folga; testar um limite grande demais (pergunta da escala).

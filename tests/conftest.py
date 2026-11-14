@@ -5,9 +5,11 @@ isso rodam com Python + NumPy + pytest, sem uma instalação do QGIS. Como os
 ``__init__.py`` do pacote importam ``qgis``, cada módulo é carregado direto do
 arquivo com ``importlib`` (sem executar os ``__init__``).
 """
+import importlib
 import importlib.util
 import os
 import sys
+import types
 
 import pytest
 
@@ -57,6 +59,25 @@ def wmm():
     return carregar_modulo('orifsc_wmm', 'algorithms', 'ocad', 'wmm.py')
 
 
+def carregar_do_nucleo(nome: str):
+    """Carrega ``algorithms/ocad/<nome>.py`` como submódulo de um pacote
+    sintético, para que imports relativos entre módulos puros do núcleo
+    (ex.: folha → geo) funcionem sem executar o ``__init__`` (que usa qgis).
+    """
+    pacote = 'orifsc_nucleo'
+    if pacote not in sys.modules:
+        mod_pacote = types.ModuleType(pacote)
+        mod_pacote.__path__ = [os.path.join(PACOTE, 'algorithms', 'ocad')]
+        sys.modules[pacote] = mod_pacote
+    return importlib.import_module(f'{pacote}.{nome}')
+
+
 @pytest.fixture(scope='session')
 def folha():
-    return carregar_modulo('orifsc_folha', 'algorithms', 'ocad', 'folha.py')
+    return carregar_do_nucleo('folha')
+
+
+@pytest.fixture(scope='session')
+def geo_nucleo():
+    """O mesmo geo.py que o folha.py usa (via pacote sintético)."""
+    return carregar_do_nucleo('geo')
