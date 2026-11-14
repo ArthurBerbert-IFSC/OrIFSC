@@ -252,6 +252,21 @@ INSTRUCOES = {
                 '(declinação calculada sem internet) — no OCAD ela fica '
                 'em pé.')
     ),
+    'ajustar_folha': (
+        _passos([
+            ('Mude escala, papel ou orientação',
+             'O contorno <b>laranja</b> mostra no mapa a folha que vai ficar.'),
+            ('Mova a folha',
+             'Em <b>Mover no mapa…</b> o contorno segue o mouse; clique para '
+             'fixar (botão direito ou Esc cancela).'),
+            ('Aplique',
+             'A camada <b>folha</b> é atualizada, sempre girada para o norte '
+             'magnético.'),
+        ])
+        + _esp()
+        + _dica('Se já tinha gerado <b>curvas</b> ou exportado o projeto, '
+                'refaça essas etapas para a nova folha.')
+    ),
     'configuracoes': (
         _secao('Padrões globais')
         + _bullets([

@@ -55,3 +55,8 @@ def simbologia():
 @pytest.fixture(scope='session')
 def wmm():
     return carregar_modulo('orifsc_wmm', 'algorithms', 'ocad', 'wmm.py')
+
+
+@pytest.fixture(scope='session')
+def folha():
+    return carregar_modulo('orifsc_folha', 'algorithms', 'ocad', 'folha.py')

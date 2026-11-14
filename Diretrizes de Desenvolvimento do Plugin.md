@@ -60,7 +60,8 @@
    - O papel do OCAD/OOM é orientado ao norte magnético (grivação = declinação − convergência meridiana). Por isso a folha **nasce girada** pela grivação no "Definir Local" (`geo.cantos_folha`), e não alinhada à quadrícula UTM — senão ela aparece inclinada no OCAD, com cantos vazios (problema da 0.1.x).
    - A declinação é calculada **uma vez, na criação da folha** (WMM offline ou valor manual) e salva no projeto (`comum.salvar_declinacao`); a exportação usa **essa mesma** declinação por padrão. Exportar com outra declinação gera aviso, porque a folha ficaria inclinada pela diferença.
    - `geo.papel_para_mundo` reproduz exatamente o `QTransform` de `ProjetoOcad`; qualquer mudança em um exige a mesma mudança no outro (o teste `tests/test_folha_girada.py` confere a equivalência quando o PyQt5 está disponível).
-   - Projetos da 0.1.x (sem `folha_grivacao` salvo) continuam funcionando com a folha alinhada à quadrícula; a exportação avisa e sugere refazer o "Definir Local".
+   - Projetos da 0.1.x (sem `folha_grivacao` salvo) continuam funcionando com a folha alinhada à quadrícula; a exportação avisa e sugere refazer o "Definir Local" (ou ajustar a folha, que a converte).
+   - **Uma única camada `folha`**: criar, recriar ou ajustar a folha passa sempre por `criar_folha.aplicar_folha`, que grava o estado e **atualiza** a camada existente (marcada com a propriedade `OrIFSC/camada = folha`) em vez de adicionar outra. Cada gravação incrementa `folha_revisao` no projeto.
    - O GeoTIFF do satélite continua com o norte da quadrícula para cima e cobre o retângulo envolvente da folha girada; o OCAD/OOM gira a imagem ao abrir.
 
 ## 3. Comunicação entre módulos

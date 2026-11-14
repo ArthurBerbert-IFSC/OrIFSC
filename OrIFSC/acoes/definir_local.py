@@ -20,10 +20,8 @@ from qgis.PyQt.QtWidgets import (
     QDialogButtonBox,
 )
 
-from ..algorithms.ocad.geo import (
-    convergencia_utm, declinacao_wmm, grivacao, meridiano_central,
-)
-from .comum import salvar_folha, salvar_escala, salvar_declinacao
+from ..algorithms.ocad.folha import PAPEIS
+from ..algorithms.ocad.geo import declinacao_wmm
 from .painel import montar_com_painel, INSTRUCOES
 
 ESCALAS = [
@@ -35,12 +33,20 @@ ESCALAS = [
     ('Personalizada...', -1),
 ]
 
-FOLHAS = [('A3', 420, 297), ('A4', 297, 210), ('A5', 210, 148)]
+FOLHAS = list(PAPEIS)
 
 
 def _graus(valor: float) -> str:
     """Ângulo para exibição em pt-BR: '-20,08°'."""
     return f'{valor:.2f}°'.replace('.', ',')
+
+
+def mensagem_orientacao(info: dict) -> str:
+    """Texto da barra de mensagens depois de criar/ajustar a folha."""
+    return (f'Folha girada {_graus(info["grivacao"])} para o norte magnético '
+            f'(declinação {_graus(info["declinacao"])}, {info["origem"]}; '
+            f'convergência {_graus(info["convergencia"])}). No OCAD ela fica '
+            'em pé.')
 
 
 def ler_coordenada(texto: str) -> Optional[Tuple[float, float]]:
@@ -289,24 +295,15 @@ class DialogDefinirLocal(QDialog):
             QgsPointXY(lon, lat))
 
         declinacao, origem = self._declinacao_escolhida(lat, lon)
-        convergencia = convergencia_utm(lat, lon, meridiano_central(fuso))
-        griv = grivacao(declinacao, convergencia)
 
         QgsProject.instance().setCrs(crs_utm)
-        salvar_escala(escala)
-        salvar_folha(epsg, pt_utm.x(), pt_utm.y(), larg_mm, alt_mm, escala,
-                     griv)
-        salvar_declinacao(declinacao, origem)
-
         self.iface.mapCanvas().setDestinationCrs(crs_utm)
-        from .criar_folha import criar_folha
-        criar_folha(self.iface, self)
+        from .criar_folha import aplicar_folha
+        info = aplicar_folha(self.iface, epsg, pt_utm.x(), pt_utm.y(),
+                             larg_mm, alt_mm, escala, declinacao, origem,
+                             parent=self)
         self.iface.messageBar().pushMessage(
-            'OrIFSC',
-            f'Folha girada {_graus(griv)} para o norte magnético '
-            f'(declinação {_graus(declinacao)}, {origem}; convergência '
-            f'{_graus(convergencia)}). No OCAD ela fica em pé.',
-            level=Qgis.MessageLevel.Info,
-            duration=8)
+            'OrIFSC', mensagem_orientacao(info),
+            level=Qgis.MessageLevel.Info, duration=8)
 
         self.accept()

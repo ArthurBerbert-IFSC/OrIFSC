@@ -36,6 +36,7 @@ class OrIFSCPlugin:
         self.acoes_por_id: Dict[str, QAction] = {}
         self._titulos_base: Dict[str, str] = {}
         self.provider: Optional[OrIFSCProvider] = None
+        self._dlg_ajustar: Any = None
 
     def initGui(self) -> None:
         """Inicializa provider, constrói o menu e conecta atualização de status."""
@@ -76,6 +77,9 @@ class OrIFSCPlugin:
                  'slot': self._definir_local,
                  'icone': 'definir_local.svg',
                  'id': 'definir_local'},
+                {'titulo': 'Ajustar Folha (mover, escala, papel)…',
+                 'slot': self._ajustar_folha,
+                 'icone': 'definir_local.svg'},
                 {'titulo': 'Camada de Limite',
                  'slot': self._criar_limite,
                  'icone': 'criar_limite.svg'},
@@ -183,6 +187,7 @@ class OrIFSCPlugin:
         As ações são parenteadas no menu, então o deleteLater() do menu
         remove tudo em cascata — sem referências órfãs entre recargas.
         """
+        self._fechar_ajustar()
         if self.menu_orifsc:
             self.menu_orifsc.deleteLater()
             self.menu_orifsc = None
@@ -205,6 +210,30 @@ class OrIFSCPlugin:
         from .acoes.definir_local import DialogDefinirLocal
         dlg = DialogDefinirLocal(self.iface, self.iface.mainWindow())
         dlg.exec()
+
+    def _fechar_ajustar(self) -> None:
+        """Fecha o Ajustar Folha aberto (limpa a prévia e a ferramenta)."""
+        if self._dlg_ajustar is not None:
+            try:
+                self._dlg_ajustar.close()
+            except RuntimeError:  # já destruído pelo Qt
+                pass
+            self._dlg_ajustar = None
+
+    def _ajustar_folha(self) -> None:
+        """Abre o Ajustar Folha (não modal, para poder clicar no mapa)."""
+        from .acoes.comum import (projeto_configurado,
+                                  avisar_projeto_nao_configurado)
+        if not projeto_configurado():
+            avisar_projeto_nao_configurado(self.iface)
+            return
+        from qgis.PyQt.QtCore import Qt
+        from .acoes.ajustar_folha import DialogAjustarFolha
+        self._fechar_ajustar()
+        dlg = DialogAjustarFolha(self.iface, self.iface.mainWindow())
+        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self._dlg_ajustar = dlg
+        dlg.show()
 
     def _criar_limite(self) -> None:
         """Cria a camada de limite do projeto atual.

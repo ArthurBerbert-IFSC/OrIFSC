@@ -35,6 +35,19 @@ def salvar_folha(epsg: int, ref_e: float, ref_n: float, larg_mm: float,
     proj.writeEntryDouble(ESCOPO, 'folha_larg_mm', float(larg_mm))
     proj.writeEntryDouble(ESCOPO, 'folha_alt_mm', float(alt_mm))
     proj.writeEntryDouble(ESCOPO, 'folha_grivacao', float(grivacao))
+    revisao, _ = proj.readNumEntry(ESCOPO, 'folha_revisao', 0)
+    proj.writeEntry(ESCOPO, 'folha_revisao', int(revisao) + 1)
+
+
+def ler_folha_revisao() -> int:
+    """Contador que sobe a cada vez que a folha é criada ou ajustada.
+
+    Permite saber se curvas/exportação foram feitas para a folha atual
+    (etapas "desatualizadas" do painel assistente).
+    """
+    revisao, ok = QgsProject.instance().readNumEntry(
+        ESCOPO, 'folha_revisao', 0)
+    return int(revisao) if ok else 0
 
 
 def ler_folha_girada() -> Optional[Dict[str, Any]]:

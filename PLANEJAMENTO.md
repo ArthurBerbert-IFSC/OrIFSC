@@ -33,7 +33,12 @@ Decisões técnicas (tomadas pelo Claude, sem objeção):
   - [x] Folha nasce girada para o norte magnético (grivação = declinação − convergência).
   - [x] Satélite e curvas cobrem a folha girada inteira (o satélite cobre o retângulo envolvente; as curvas são recortadas pelo polígono girado).
   - [x] Exportação usa a declinação salva na folha; projetos antigos continuam exportando como antes (com aviso).
-- [ ] **Parte 2 — Ajustar a folha**: mover clicando no mapa; trocar escala, papel e orientação com prévia, sem refazer o projeto.
+- [x] **Parte 2 — Ajustar a folha** (menu Início → "Ajustar Folha (mover, escala, papel)…")
+  - [x] Contorno laranja de prévia ao trocar escala, papel ou orientação.
+  - [x] "Mover no mapa…": o contorno segue o mouse, clique fixa (botão direito/Esc cancela).
+  - [x] Declinação e convergência recalculadas no novo lugar (valor manual é mantido).
+  - [x] A camada `folha` é atualizada no lugar, nunca duplicada (inclusive ao rodar o Definir Local de novo); projetos 0.1.x são convertidos para a folha girada ao ajustar.
+  - [x] Contador de revisão da folha no projeto (base para as etapas "desatualizadas" da parte 5).
 - [ ] **Parte 3 — Ajustar ao limite**: calcula orientação/papel/posição que cabem no limite (regra da decisão 6).
 - [ ] **Parte 4 — Tipos de mapa**: presets Sprint / Floresta / Personalizado.
 - [ ] **Parte 5 — Painel assistente**: etapas com ✓ / ▶ / ⚠, avisa sem bloquear, marca etapas desatualizadas.
@@ -46,10 +51,6 @@ Presets iniciais (parte 4 — validar com a FLORA):
 | Sprint / urbano | ISSprOM 2019-2 | 1:4.000 | 2,5 m | A4 |
 | Floresta / rural | ISOM 2017-2 | 1:10.000 | 5 m | A4 |
 | Personalizado | livre | livre | livre | livre |
-
-Observação para a parte 2: hoje, rodar "Definir Local" de novo cria **outra** camada
-`folha` (comportamento herdado da 0.1.x). Ao implementar "mover a folha", atualizar a
-camada existente em vez de duplicar.
 
 ## Depois da 0.2.0
 
@@ -66,3 +67,5 @@ Para cada um dos dois programas, com um projeto em Florianópolis (declinação 
 3. A georreferência mostra a declinação usada no "Definir Local" e a grivação do log.
 4. Curvas mestras no símbolo 102 (testar com equidistância 2,5 m e 5 m).
 5. Projeto antigo (folha criada na 0.1.x) ainda exporta e abre.
+6. Ajustar Folha (no QGIS): mover, trocar escala/papel/orientação e conferir que a
+   exportação seguinte sai com a folha nova, em pé.
