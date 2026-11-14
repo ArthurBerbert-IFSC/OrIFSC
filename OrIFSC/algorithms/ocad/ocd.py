@@ -294,6 +294,12 @@ def _objeto_bytes(
     return dados, bounds
 
 
+def numero_ocd(codigo: str) -> int:
+    """Código de símbolo ('601', '601.1') → número OCD (601000, 601001)."""
+    principal, _, sub = codigo.partition('.')
+    return int(principal) * FATOR_SIMBOLO + (int(sub) if sub else 0)
+
+
 def _numeros_por_codigo(w: '_OcdWriter') -> Tuple[int, int]:
     """Números dos símbolos de curva (101) e curva mestra (102) do doador.
 
@@ -351,6 +357,18 @@ def escrever_ocd_v10(proj: Any, caminho: str,
                   else numero_curva)
         dados, bounds = _objeto_bytes(linha, numero)
         w.add_object(dados, bounds, numero, 2, 0)
+
+    # Linhas de norte só com a paleta da norma (o modo sem doador tem apenas
+    # o símbolo de curva).
+    linhas_norte = list(getattr(proj, 'linhas_norte_mm', None) or [])
+    if linhas_norte and doador is not None:
+        numero_norte = numero_ocd(proj.codigo_norte)
+        if numero_norte not in set(w.numeros_de_simbolos()):
+            raise ValueError('Doador de simbologia sem a linha de norte '
+                             '(%s).' % proj.codigo_norte)
+        for linha in linhas_norte:
+            dados, bounds = _objeto_bytes(linha, numero_norte)
+            w.add_object(dados, bounds, numero_norte, 2, 0)
 
     if proj.satelite:
         nome = os.path.basename(proj.satelite['path'])

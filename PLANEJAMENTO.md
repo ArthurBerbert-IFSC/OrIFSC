@@ -18,6 +18,7 @@ concluídos e registre aqui qualquer mudança de decisão.
 | 8 | Folga entre o limite e a borda do papel | **5 mm** no papel. |
 | 9 | Tipo "Escolar / Parque" | **Sim**: ISSprOM, 1:2.000, equidistância 2 m, A4. |
 | 10 | Quando o assistente aparece | **Abre sozinho na primeira vez**; depois o QGIS lembra se a pessoa fechou; botão na barra reabre. |
+| 11 | Como saem as linhas de norte | **Linhas separadas, pretas** (símbolo de linha de norte da norma), uma por objeto. |
 
 Decisões técnicas (tomadas pelo Claude, sem objeção):
 
@@ -59,7 +60,15 @@ Decisões técnicas (tomadas pelo Claude, sem objeção):
   - [x] Atualiza sozinho (camadas entram/saem, projeto aberto/limpo, folha ajustada, curvas geradas, exportação).
   - [x] Abre sozinho na primeira vez; fechar é lembrado; botão na barra e item no topo do menu reabrem.
   - [x] O ✓ / ▶ / ⚠ do menu OrIFSC usa a mesma lógica do painel.
-- [ ] **Parte 6 — Linhas de norte magnético** como objetos no `.ocd`/`.omap`, no espaçamento da norma.
+- [x] **Parte 6 — Linhas de norte magnético** (exportação: "Incluir linhas de norte magnético", ligado por padrão)
+  - [x] Espaçamento lido das normas embutidas: ISOM 300 m no terreno (20 mm em 1:15.000, 30 mm em 1:10.000); ISSprOM 30 mm no papel.
+  - [x] Linhas verticais no papel (norte magnético), recortadas pela folha, de baixo para cima; uma por objeto.
+  - [x] Símbolo por norma: ISOM `601.1` (OCD 601001), ISSprOM `601` (OCD 601000) — na ISSprOM o `601.1` é o padrão de área.
+  - [x] Sem simbologia (ou sem doador `.ocd`) não há símbolo 601: as linhas não entram, com aviso no log.
+
+**Escopo da 0.2.0 completo.** `metadata.txt` já está em `version=0.2.0` com o changelog.
+Para publicar: rodar o checklist abaixo no OCAD 10 e no OOM → juntar o branch no `main`
+→ `git tag 0.2.0 && git push origin 0.2.0` (ver `PUBLICAR.md`).
 
 Tipos de mapa (parte 4 — em `OrIFSC/algorithms/ocad/tipos_mapa.py`):
 
@@ -94,3 +103,7 @@ Para cada um dos dois programas, com um projeto em Florianópolis (declinação 
 9. Assistente: num QGIS novo ele abre sozinho; seguir o fluxo inteiro só pelos links do
    painel; ajustar a folha e ver curvas/exportação ficarem ⚠; fechar, reiniciar o QGIS e
    conferir que continua fechado (o botão na barra reabre).
+10. Linhas de norte: no OCAD 10 e no OOM, linhas pretas verticais (paralelas às laterais
+    do papel), a cada 30 mm no sprint/escolar e 300 m no terreno na floresta; dá para
+    selecionar e cortar uma linha isolada.
+11. Rodar no QGIS 3.40 LTR e no QGIS 4 (os testes daqui usaram o QGIS 3.34 sem tela).

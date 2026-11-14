@@ -55,6 +55,7 @@
    - Para o `.ocd`, a paleta vem de um **arquivo doador OCD v9/v10** gerado uma única vez exportando o symbol set no próprio OOM (v9 é normalizado para v10 no cabeçalho). **Arquivos de simbologia do OCAD não podem ser redistribuídos** — o doador tem que derivar do OOM. Se o doador não existir, a exportação degrada com aviso para o símbolo único (nunca falha por isso).
    - Curvas mestras: elevação (ELEV) múltipla de 5x a equidistância → símbolo 102; a equidistância é **deduzida dos próprios dados** (menor diferença entre elevações distintas), sem depender de configuração.
    - Ao atualizar os symbol sets para uma nova versão do OOM: baixar da tag correspondente, regenerar os doadores `.ocd` e atualizar `PROVENIENCIA.txt`.
+   - **Linhas de norte magnético**: linhas separadas no símbolo de linha preta da norma, localizado pelo código em `simbologia.CODIGO_LINHA_NORTE` — **o código muda entre as normas** (ISOM `601.1`; ISSprOM `601`, onde `601.1` é o padrão de área). Espaçamento em `geo.espacamento_norte_mm` (texto das normas). O teste `tests/test_linhas_norte.py` confere o código contra os arquivos embutidos; ao trocar de symbol set, rode-o.
 
 11. **Folha orientada ao norte magnético**
    - O papel do OCAD/OOM é orientado ao norte magnético (grivação = declinação − convergência meridiana). Por isso a folha **nasce girada** pela grivação no "Definir Local" (`geo.cantos_folha`), e não alinhada à quadrícula UTM — senão ela aparece inclinada no OCAD, com cantos vazios (problema da 0.1.x).

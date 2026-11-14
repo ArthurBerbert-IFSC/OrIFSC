@@ -325,6 +325,9 @@ INSTRUCOES = {
             '(mestras no símbolo 102 a cada 5ª equidistância).',
             'A <b>paleta de símbolos oficial</b> (ISOM 2017-2 ou '
             'ISSprOM 2019-2) pronta para desenhar.',
+            'As <b>linhas de norte magnético</b> (símbolo 601, no espaçamento '
+            'da norma), uma por objeto — dá para cortar onde esconderem '
+            'detalhes.',
         ])
         + _esp()
         + _dica('Posicione a folha e salve as edições antes de gerar. Mantenha '

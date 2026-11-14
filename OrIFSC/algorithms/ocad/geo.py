@@ -81,6 +81,56 @@ def cantos_folha(ref_e: float, ref_n: float, larg_mm: float, alt_mm: float,
                          (meia_l, meia_a), (-meia_l, meia_a))]
 
 
+def espacamento_norte_mm(norma: str, escala: int) -> float:
+    """Espaçamento das linhas de norte magnético no papel (mm), pela norma.
+
+    Textos das normas, como estão nos symbol sets embutidos (símbolo 601):
+    ISOM 2017-2 — 20 mm em 1:15.000, isto é, 300 m no terreno (30 mm na
+    ampliação 1:10.000); ISSprOM 2019-2 — 30 mm no papel em qualquer escala.
+    """
+    if norma == 'ISOM':
+        return 300.0 * 1000.0 / escala
+    if norma == 'ISSPROM':
+        return 30.0
+    raise ValueError('Norma desconhecida para linhas de norte: %r' % (norma,))
+
+
+def linhas_norte(poligono_mm: List[Tuple[float, float]],
+                 espacamento_mm: float,
+                 folga_borda_mm: float = 0.5) -> List[List[Tuple[float, float]]]:
+    """Linhas de norte magnético cobrindo a folha, no papel (mm, y para baixo).
+
+    No papel do OCAD/OOM o norte magnético é o "para cima", então as linhas
+    são verticais, a cada ``espacamento_mm`` a partir do centro (x = 0) e
+    recortadas pelo contorno da folha (polígono convexo — a folha é um
+    retângulo, girado ou não). Cada linha vai de baixo para cima (sul →
+    norte), para que um símbolo com seta aponte para o norte. Linhas a menos
+    de ``folga_borda_mm`` das laterais da folha são omitidas (cairiam sobre
+    a borda).
+    """
+    if espacamento_mm <= 0:
+        raise ValueError('Espaçamento das linhas de norte deve ser > 0.')
+    pts = list(poligono_mm)
+    if len(pts) > 1 and pts[0] == pts[-1]:
+        pts = pts[:-1]
+    if len(pts) < 3:
+        return []
+    x_min = min(x for x, _ in pts) + folga_borda_mm
+    x_max = max(x for x, _ in pts) - folga_borda_mm
+    linhas = []
+    k = math.ceil(x_min / espacamento_mm)
+    while k * espacamento_mm <= x_max:
+        x = k * espacamento_mm
+        ys = []
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:] + pts[:1]):
+            if x1 != x2 and (x1 - x) * (x2 - x) <= 0:
+                ys.append(y1 + (x - x1) / (x2 - x1) * (y2 - y1))
+        if len(ys) >= 2 and max(ys) - min(ys) > 1e-9:
+            linhas.append([(x, max(ys)), (x, min(ys))])
+        k += 1
+    return linhas
+
+
 def meridiano_central(zona: int) -> int:
     """Longitude (graus) do meridiano central de uma zona UTM."""
     return zona * 6 - 183

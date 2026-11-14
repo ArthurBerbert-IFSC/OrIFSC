@@ -17,7 +17,8 @@ from qgis.PyQt.QtGui import QTransform
 from typing import Iterable, Optional, Tuple
 
 from .geo import (
-    convergencia_utm, codigo_grade_zona, meridiano_central, zona_utm_de_epsg,
+    convergencia_utm, codigo_grade_zona, linhas_norte, meridiano_central,
+    zona_utm_de_epsg,
 )
 
 COR_CURVA = (0.0, 0.56, 1.0, 0.18)
@@ -114,6 +115,29 @@ class ProjetoOcad:
                 codigos[i] if codigos else str(CODIGO_SIMBOLO))
 
         self.satelite = self._preparar_satelite(satelite)
+        self.linhas_norte_mm = []
+        self.codigo_norte = None
+
+    def definir_linhas_norte(
+            self,
+            poligono_folha: Iterable[Tuple[float, float]],
+            espacamento_mm: float,
+            codigo: str) -> int:
+        """Gera as linhas de norte magnético cobrindo a folha.
+
+        Args:
+            poligono_folha: Contorno da folha em UTM (metros).
+            espacamento_mm: Espaçamento no papel (``geo.espacamento_norte_mm``).
+            codigo: Código do símbolo de linha de norte no symbol set
+                (``simbologia.CODIGO_LINHA_NORTE``).
+
+        Returns:
+            int: Quantidade de linhas geradas.
+        """
+        contorno = [self.mapa_mm(e, n) for e, n in poligono_folha]
+        self.linhas_norte_mm = linhas_norte(contorno, espacamento_mm)
+        self.codigo_norte = codigo
+        return len(self.linhas_norte_mm)
 
     def mapa_mm(self, e: float, n: float) -> Tuple[float, float]:
         """Ponto do mundo (UTM) → papel do mapa em mm (y para baixo)."""

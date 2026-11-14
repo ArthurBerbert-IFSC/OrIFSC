@@ -50,6 +50,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
     QUALIDADE = 'QUALIDADE'
     CURVAS = 'CURVAS'
     SIMBOLOGIA = 'SIMBOLOGIA'
+    LINHAS_NORTE = 'LINHAS_NORTE'
     DECL_AUTO = 'DECL_AUTO'
     DECL_MANUAL = 'DECL_MANUAL'
     FORMATO = 'FORMATO'
@@ -168,6 +169,11 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             options=OPCOES_SIMBOLOGIA,
             defaultValue=self._simbologia_padrao()))
         self.addParameter(QgsProcessingParameterBoolean(
+            self.LINHAS_NORTE,
+            'Incluir linhas de norte magnético (símbolo 601, espaçamento da '
+            'norma; exige simbologia)',
+            defaultValue=True))
+        self.addParameter(QgsProcessingParameterBoolean(
             self.DECL_AUTO,
             'Usar a declinação magnética da folha (calculada em "Definir '
             'Local")',
@@ -223,6 +229,8 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             feedback.pushWarning('A camada de curvas selecionada está inválida.')
             raise QgsProcessingException('Camada de curvas inválida.')
 
+        incluir_norte = self.parameterAsBool(
+            parameters, self.LINHAS_NORTE, context)
         indice_simb = self.parameterAsEnum(
             parameters, self.SIMBOLOGIA, context)
         norma = (NORMA_ISOM, NORMA_ISSPROM, None)[indice_simb]
@@ -303,6 +311,8 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         if norma is not None:
             feedback.pushInfo('Simbologia: %s.'
                               % OPCOES_SIMBOLOGIA[indice_simb])
+        if incluir_norte:
+            self._linhas_norte(proj, folha, norma, escala, feedback)
 
         resultado = {}
         if fazer_ocad:
@@ -314,7 +324,8 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                 feedback.pushWarning(
                     'Simbologia para .ocd ainda não disponível (falta o '
                     f'arquivo {os.path.basename(doador)} no plugin); o .ocd '
-                    'sai só com o símbolo de curva. O .omap sai completo.')
+                    'sai só com o símbolo de curva (sem linhas de norte). O '
+                    '.omap sai completo.')
                 doador = None
             try:
                 escrever_ocd_v10(proj, ocd, doador=doador)
@@ -323,7 +334,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                     raise
                 feedback.pushWarning(
                     f'Simbologia .ocd descartada ({exc}); gerando só com o '
-                    'símbolo de curva.')
+                    'símbolo de curva (sem linhas de norte).')
                 escrever_ocd_v10(proj, ocd)
             resultado['OCD'] = ocd
         if fazer_omap:
@@ -362,6 +373,36 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             raise QgsProcessingException(
                 f'CRS {authid} não é WGS84/UTM. Rode "Definir Local e Criar Folha".')
         return epsg
+
+    def _linhas_norte(self, proj: Any, folha: Any, norma: Optional[str],
+                      escala: int, feedback: Any) -> None:
+        """Acrescenta ao projeto as linhas de norte magnético da norma.
+
+        Linhas separadas no símbolo de linha de norte preto (decisão de
+        nov/2026), cobrindo o contorno da folha, para o mapeador poder cortar
+        cada uma onde esconder detalhes, como a norma pede. Sem simbologia
+        não há o símbolo 601 no projeto, então nada é gerado.
+        """
+        if norma is None:
+            feedback.pushInfo(
+                'Linhas de norte não incluídas: elas usam o símbolo 601 da '
+                'norma — escolha a simbologia ISOM ou ISSprOM.')
+            return
+        from .ocad.geo import espacamento_norte_mm
+        from .ocad.simbologia import CODIGO_LINHA_NORTE
+        feicao = next(folha.getFeatures(), None)
+        if feicao is None or feicao.geometry().isEmpty():
+            feedback.pushWarning('Folha sem geometria: linhas de norte não '
+                                 'incluídas.')
+            return
+        contorno = [(v.x(), v.y()) for v in feicao.geometry().vertices()]
+        espacamento = espacamento_norte_mm(norma, escala)
+        codigo = CODIGO_LINHA_NORTE[norma]
+        n = proj.definir_linhas_norte(contorno, espacamento, codigo)
+        feedback.pushInfo(
+            f'{n} linha(s) de norte magnético (símbolo {codigo}) a cada '
+            f'{espacamento:g} mm no papel ({espacamento * escala / 1000:g} m '
+            'no terreno).')
 
     def _declinacao(self, decl_auto: bool, decl_manual: float, epsg: int,
                     rect: Tuple[float, float, float, float],
