@@ -119,6 +119,49 @@ def ler_folha() -> Optional[Tuple[int, float, float, float, float]]:
     return epsg, x0, y0, x1, y1
 
 
+def marcar_curvas_geradas() -> None:
+    """Registra que as curvas foram geradas para a folha atual.
+
+    Guarda a revisão da folha naquele momento e incrementa um contador de
+    gerações (a exportação compara com ele para saber se ficou para trás).
+    """
+    proj = QgsProject.instance()
+    geracao, _ = proj.readNumEntry(ESCOPO, 'curvas_geracao', 0)
+    proj.writeEntry(ESCOPO, 'curvas_geracao', int(geracao) + 1)
+    proj.writeEntry(ESCOPO, 'curvas_folha_revisao', ler_folha_revisao())
+
+
+def marcar_exportacao(pasta: str) -> None:
+    """Registra a exportação: revisão da folha, geração das curvas e pasta."""
+    proj = QgsProject.instance()
+    geracao, _ = proj.readNumEntry(ESCOPO, 'curvas_geracao', 0)
+    proj.writeEntry(ESCOPO, 'exportacao_folha_revisao', ler_folha_revisao())
+    proj.writeEntry(ESCOPO, 'exportacao_curvas_geracao', int(geracao))
+    proj.writeEntry(ESCOPO, 'exportacao_pasta', str(pasta))
+
+
+def ler_marcas() -> Dict[str, Any]:
+    """Registros de geração de curvas e exportação (None = nunca registrado).
+
+    Chaves: curvas_folha_revisao, curvas_geracao, exportacao_folha_revisao,
+    exportacao_curvas_geracao, exportacao_pasta.
+    """
+    proj = QgsProject.instance()
+
+    def numero(chave: str) -> Optional[int]:
+        valor, ok = proj.readNumEntry(ESCOPO, chave, 0)
+        return int(valor) if ok else None
+
+    pasta, _ = proj.readEntry(ESCOPO, 'exportacao_pasta', '')
+    return {
+        'curvas_folha_revisao': numero('curvas_folha_revisao'),
+        'curvas_geracao': numero('curvas_geracao') or 0,
+        'exportacao_folha_revisao': numero('exportacao_folha_revisao'),
+        'exportacao_curvas_geracao': numero('exportacao_curvas_geracao'),
+        'exportacao_pasta': pasta,
+    }
+
+
 def salvar_tipo_mapa(tipo_id: str) -> None:
     """Grava o tipo de mapa escolhido no Definir Local (sprint, floresta,
     escolar ou personalizado)."""

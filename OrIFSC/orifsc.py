@@ -2,12 +2,17 @@
 
 import os
 from typing import Any, Dict, List, Optional
+from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMenu
-from qgis.core import QgsApplication, Qgis
+from qgis.core import QgsApplication, QgsSettings, Qgis
 from .provider import OrIFSCProvider
 
 SEP = object()
+
+# Preferência global: o assistente estava aberto da última vez? (ausente =
+# primeira vez → abre sozinho; decisão de nov/2026).
+CHAVE_ASSISTENTE_VISIVEL = 'OrIFSC/assistente_visivel'
 
 ICONS_DIR = os.path.join(os.path.dirname(__file__), 'icons')
 
@@ -37,6 +42,7 @@ class OrIFSCPlugin:
         self._titulos_base: Dict[str, str] = {}
         self.provider: Optional[OrIFSCProvider] = None
         self._dlg_ajustar: Any = None
+        self.assistente: Any = None
 
     def initGui(self) -> None:
         """Inicializa provider, constrói o menu e conecta atualização de status."""
@@ -60,6 +66,52 @@ class OrIFSCPlugin:
         self._construir_menu(self.menu_orifsc, self._definicao_menu())
 
         self.menu_orifsc.aboutToShow.connect(self._atualizar_status_menu)
+        self._criar_assistente()
+
+    def _criar_assistente(self) -> None:
+        """Painel lateral do assistente + botão na barra e no topo do menu.
+
+        Abre sozinho na primeira vez; depois vale o que a pessoa escolheu da
+        última vez (fechar no X ou no botão é lembrado entre sessões).
+        """
+        from .acoes.assistente import PainelAssistente
+        self.assistente = PainelAssistente({
+            'definir_local': self._definir_local,
+            'ajustar_folha': self._ajustar_folha,
+            'satelite': self._carregar_satelite,
+            'osm': self._base_osm,
+            'sigsc': self._sigsc_adicionar,
+            'limite': self._criar_limite,
+            'curvas': self._gerar_curvas,
+            'exportar': self._exportar_ocad,
+        }, self.iface.mainWindow())
+        self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,
+                                 self.assistente)
+
+        acao = self.assistente.toggleViewAction()
+        acao.setIcon(_icone('icon.svg'))
+        acao.setText('Assistente OrIFSC')
+        acao.setToolTip('Mostrar/ocultar o Assistente OrIFSC (etapas do mapa)')
+        acao.triggered.connect(self._lembrar_assistente)
+        self.assistente.closed.connect(
+            lambda: self._lembrar_assistente(False))
+        self.iface.addToolBarIcon(acao)
+        acoes_menu = self.menu_orifsc.actions()
+        primeira = acoes_menu[0] if acoes_menu else None
+        self.menu_orifsc.insertAction(primeira, acao)
+        self.menu_orifsc.insertSeparator(primeira)
+
+        valor = QgsSettings().value(CHAVE_ASSISTENTE_VISIVEL, None)
+        if valor is None:
+            visivel = True
+            self._lembrar_assistente(True)
+        else:
+            visivel = str(valor).lower() in ('true', '1')
+        self.assistente.setVisible(visivel)
+
+    def _lembrar_assistente(self, visivel: bool) -> None:
+        """Grava se o assistente fica aberto (vale para as próximas sessões)."""
+        QgsSettings().setValue(CHAVE_ASSISTENTE_VISIVEL, bool(visivel))
 
     def _definicao_menu(self) -> List[Any]:
         """Estrutura declarativa do menu. Para adicionar uma função, basta
@@ -160,26 +212,20 @@ class OrIFSCPlugin:
         """Marca as etapas-chave do fluxo: ✓ concluída, ▶ próxima sugerida.
 
         Não altera o que está habilitado — todos os itens seguem clicáveis. É só
-        um guia visual, recalculado a cada abertura do menu a partir do estado
-        atual do projeto (folha definida? já há curvas?)."""
-        from .acoes.comum import projeto_configurado, tem_camada_curvas
-        definido = projeto_configurado()
-        tem_curvas = tem_camada_curvas()
-        if not definido:
-            proximo = 'definir_local'
-        elif not tem_curvas:
-            proximo = 'gerar_curvas'
-        else:
-            proximo = 'exportar'
-        feito = {'definir_local': definido, 'gerar_curvas': tem_curvas}
+        um guia visual, recalculado a cada abertura do menu com a mesma lógica
+        do Assistente (``acoes/etapas.py``), incluindo ⚠ para etapas
+        desatualizadas."""
+        from .acoes.assistente import situacao_do_projeto
+        from .acoes.etapas import AVISO, FEITO, PROXIMO, calcular_etapas
+        estados = {e.id: e.estado
+                   for e in calcular_etapas(situacao_do_projeto())}
+        etapa_do_menu = {'definir_local': 'local', 'gerar_curvas': 'curvas',
+                         'exportar': 'exportar'}
+        prefixo = {FEITO: '✓  ', PROXIMO: '▶  ', AVISO: '⚠  '}
         for aid, act in self.acoes_por_id.items():
             base = self._titulos_base.get(aid, act.text())
-            if feito.get(aid):
-                act.setText('✓  ' + base)
-            elif aid == proximo:
-                act.setText('▶  ' + base)
-            else:
-                act.setText(base)
+            estado = estados.get(etapa_do_menu.get(aid, ''))
+            act.setText(prefixo.get(estado, '') + base)
 
     def unload(self) -> None:
         """Remove menu, ações e provider de Processing ao descarregar.
@@ -188,6 +234,12 @@ class OrIFSCPlugin:
         remove tudo em cascata — sem referências órfãs entre recargas.
         """
         self._fechar_ajustar()
+        if self.assistente is not None:
+            self.iface.removeToolBarIcon(self.assistente.toggleViewAction())
+            self.assistente.desconectar()
+            self.iface.removeDockWidget(self.assistente)
+            self.assistente.deleteLater()
+            self.assistente = None
         if self.menu_orifsc:
             self.menu_orifsc.deleteLater()
             self.menu_orifsc = None
@@ -297,7 +349,11 @@ class OrIFSCPlugin:
                 duration=8)
             return
         import processing
-        processing.execAlgorithmDialog('orifsc:gerar_curvas_nivel', {})
+        resultado = processing.execAlgorithmDialog(
+            'orifsc:gerar_curvas_nivel', {})
+        if resultado:
+            from .acoes.comum import marcar_curvas_geradas
+            marcar_curvas_geradas()
 
     def _sigsc_adicionar(self) -> None:
         """Executa o fluxo guiado de dados públicos do SIG@SC.
@@ -318,18 +374,19 @@ class OrIFSCPlugin:
         exportar; por isso o fluxo valida estado em ``acoes.comum`` antes de
         abrir o algoritmo.
         """
-        from qgis.core import QgsProject
         from .acoes.comum import (projeto_configurado,
-                                  avisar_projeto_nao_configurado, camada_curvas)
+                                  avisar_projeto_nao_configurado, camada_curvas,
+                                  marcar_exportacao)
         from .acoes.configuracoes import ler_pasta_saida
+        from .acoes.criar_folha import camada_folha
         if not projeto_configurado():
             avisar_projeto_nao_configurado(self.iface)
             return
 
         params = {}
-        folhas = QgsProject.instance().mapLayersByName('folha')
-        if folhas:
-            params['FOLHA'] = folhas[0].id()
+        folha = camada_folha()
+        if folha is not None:
+            params['FOLHA'] = folha.id()
         curvas = camada_curvas()
         if curvas is not None:
             params['CURVAS'] = curvas.id()
@@ -338,7 +395,11 @@ class OrIFSCPlugin:
             params['PASTA'] = pasta
 
         import processing
-        processing.execAlgorithmDialog('orifsc:exportar_ocad', params)
+        resultado = processing.execAlgorithmDialog(
+            'orifsc:exportar_ocad', params) or {}
+        gerado = resultado.get('OCD') or resultado.get('OMAP')
+        if gerado:
+            marcar_exportacao(os.path.dirname(gerado))
 
     def _configuracoes(self) -> None:
         """Abre o diálogo de configurações globais.

@@ -17,6 +17,7 @@ concluídos e registre aqui qualquer mudança de decisão.
 | 7 | Programas de destino | Usam todos, mas o alvo de compatibilidade é **OCAD 10** e **OpenOrienteering Mapper** (o resto abre sem erro). |
 | 8 | Folga entre o limite e a borda do papel | **5 mm** no papel. |
 | 9 | Tipo "Escolar / Parque" | **Sim**: ISSprOM, 1:2.000, equidistância 2 m, A4. |
+| 10 | Quando o assistente aparece | **Abre sozinho na primeira vez**; depois o QGIS lembra se a pessoa fechou; botão na barra reabre. |
 
 Decisões técnicas (tomadas pelo Claude, sem objeção):
 
@@ -51,7 +52,13 @@ Decisões técnicas (tomadas pelo Claude, sem objeção):
   - [x] Tipo salvo no projeto: Gerar Curvas sugere a equidistância do tipo e a exportação sugere a norma do tipo.
   - [x] Último tipo usado é lembrado no próximo projeto; Personalizado e projetos sem tipo seguem as Configurações.
   - [x] Escalas 1:2.000 e 1:3.000 entram na lista.
-- [ ] **Parte 5 — Painel assistente**: etapas com ✓ / ▶ / ⚠, avisa sem bloquear, marca etapas desatualizadas.
+- [x] **Parte 5 — Painel assistente** (painel lateral "Assistente OrIFSC")
+  - [x] Seis etapas: Tipo e local → Ajustar folha (opcional) → Imagem de fundo → Limite (opcional) → Curvas → Exportar.
+  - [x] ✓ feito, ▶ próximo, ! atenção (número cinza = pendente/opcional); links disparam as mesmas ações do menu, nada é bloqueado.
+  - [x] Curvas e exportação ficam ⚠ quando a folha muda (ou as curvas são refeitas depois da exportação); com um ⚠ no caminho, não há ▶ adiante.
+  - [x] Atualiza sozinho (camadas entram/saem, projeto aberto/limpo, folha ajustada, curvas geradas, exportação).
+  - [x] Abre sozinho na primeira vez; fechar é lembrado; botão na barra e item no topo do menu reabrem.
+  - [x] O ✓ / ▶ / ⚠ do menu OrIFSC usa a mesma lógica do painel.
 - [ ] **Parte 6 — Linhas de norte magnético** como objetos no `.ocd`/`.omap`, no espaçamento da norma.
 
 Tipos de mapa (parte 4 — em `OrIFSC/algorithms/ocad/tipos_mapa.py`):
@@ -84,3 +91,6 @@ Para cada um dos dois programas, com um projeto em Florianópolis (declinação 
    contém com folga; testar um limite grande demais (pergunta da escala).
 8. Tipos de mapa: um projeto Escolar (1:2.000) exporta com a paleta ISSprOM e curvas
    de 2 m com mestras a cada 10 m.
+9. Assistente: num QGIS novo ele abre sozinho; seguir o fluxo inteiro só pelos links do
+   painel; ajustar a folha e ver curvas/exportação ficarem ⚠; fechar, reiniciar o QGIS e
+   conferir que continua fechado (o botão na barra reabre).

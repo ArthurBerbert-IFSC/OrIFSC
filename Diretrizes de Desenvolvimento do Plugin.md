@@ -68,6 +68,11 @@
    - Os tipos (Sprint, Floresta, Escolar, Personalizado) ficam em `algorithms/ocad/tipos_mapa.py` (módulo puro). O tipo escolhido no Definir Local é salvo no projeto (`comum.salvar_tipo_mapa`).
    - Precedência dos padrões: **tipo do projeto** (se tiver predefinição) → **Configurações** globais → valores do plugin. Vale para a equidistância de Gerar Curvas (`_equidistancia_padrao`) e a simbologia da exportação (`indice_simbologia_padrao`). São sempre padrões editáveis no diálogo, nunca valores forçados.
 
+13. **Assistente guia, não bloqueia**
+   - O estado das etapas é calculado num módulo puro (`acoes/etapas.py`, testado sem QGIS) a partir de uma `Situacao` lida do projeto (`assistente.situacao_do_projeto`). O painel (`acoes/assistente.py`) e o ✓/▶/⚠ do menu usam a **mesma** função — não duplicar regras de estado em outro lugar.
+   - "Desatualizado" usa marcas gravadas no projeto: `folha_revisao` (sobe a cada folha gravada), `curvas_folha_revisao`/`curvas_geracao` (gravadas por `comum.marcar_curvas_geradas` quando o diálogo de curvas termina com resultado) e `exportacao_*` (`comum.marcar_exportacao`). Curvas sem marca (projetos antigos) contam como em dia.
+   - Toda etapa mantém ações clicáveis; avisos explicam, nunca impedem.
+
 ## 3. Comunicação entre módulos
 
 - `orifsc.py` chama funções/classes em `acoes/*` sob demanda (imports locais).

@@ -86,3 +86,8 @@ def geo_nucleo():
 @pytest.fixture(scope='session')
 def tipos_mapa():
     return carregar_do_nucleo('tipos_mapa')
+
+
+@pytest.fixture(scope='session')
+def etapas():
+    return carregar_modulo('orifsc_etapas', 'acoes', 'etapas.py')
