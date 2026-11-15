@@ -294,6 +294,12 @@ def _objeto_bytes(
     return dados, bounds
 
 
+def numero_ocd(codigo: str) -> int:
+    """Código de símbolo ('601', '601.1') → número OCD (601000, 601001)."""
+    principal, _, sub = codigo.partition('.')
+    return int(principal) * FATOR_SIMBOLO + (int(sub) if sub else 0)
+
+
 def _numeros_por_codigo(w: '_OcdWriter') -> Tuple[int, int]:
     """Números dos símbolos de curva (101) e curva mestra (102) do doador.
 
@@ -352,14 +358,29 @@ def escrever_ocd_v10(proj: Any, caminho: str,
         dados, bounds = _objeto_bytes(linha, numero)
         w.add_object(dados, bounds, numero, 2, 0)
 
+    # Linhas de norte só com a paleta da norma (o modo sem doador tem apenas
+    # o símbolo de curva).
+    linhas_norte = list(getattr(proj, 'linhas_norte_mm', None) or [])
+    if linhas_norte and doador is not None:
+        numero_norte = numero_ocd(proj.codigo_norte)
+        if numero_norte not in set(w.numeros_de_simbolos()):
+            raise ValueError('Doador de simbologia sem a linha de norte '
+                             '(%s).' % proj.codigo_norte)
+        for linha in linhas_norte:
+            dados, bounds = _objeto_bytes(linha, numero_norte)
+            w.add_object(dados, bounds, numero_norte, 2, 0)
+
     if proj.satelite:
         nome = os.path.basename(proj.satelite['path'])
         mcx, mcy = proj.satelite['centro_mm']
+        # Ângulo da imagem no papel: 0 para a imagem alinhada ao papel (0.2.0);
+        # a grivação para a norte-acima (versões anteriores / testes).
+        angulo = proj.satelite.get('angulo', proj.grivacao)
         w.add_string(8, '%s\ts1\tx%.6f\ty%.6f\ta%.8f\tu%.10f\tv%.10f'
                         '\td0\tp\tt0\to0\tb%.6f' % (
-                            nome, mcx, -mcy, proj.grivacao,
+                            nome, mcx, -mcy, angulo,
                             proj.satelite['u_mm'], proj.satelite['v_mm'],
-                            proj.grivacao))
+                            angulo))
 
     with open(caminho, 'wb') as f:
         f.write(w.ba)

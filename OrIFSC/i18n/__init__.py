@@ -176,6 +176,23 @@ def maiusculas(texto: str) -> str:
     return texto.upper()
 
 
+def formatar_decimal(valor: float, casas: int = 2) -> str:
+    """Número com o separador decimal do idioma: 2,5 (pt/tr) ou 2.5 (en).
+
+    ``casas`` é o máximo de casas; zeros à direita são cortados (5,0 → 5).
+    """
+    s = f'{float(valor):.{casas}f}'
+    if '.' in s:
+        s = s.rstrip('0').rstrip('.')
+    return s if idioma() == 'en' else s.replace('.', ',')
+
+
+def formatar_graus(valor: float) -> str:
+    """Ângulo com duas casas e o separador do idioma: -20,08° / -20.08°."""
+    s = f'{float(valor):.2f}°'
+    return s if idioma() == 'en' else s.replace('.', ',')
+
+
 def formatar_inteiro(valor: int) -> str:
     """Inteiro com separador de milhar do idioma: 10.000 (pt/tr) ou
     10,000 (en)."""

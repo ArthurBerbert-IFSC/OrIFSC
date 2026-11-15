@@ -8,6 +8,8 @@ dois formatos saem com geometria idêntica e sem erro de sinal de rotação.
 Coordenadas de papel ficam em **mm com y para baixo** (convenção do OOM); cada
 escritor depois aplica suas unidades (OOM: 1/1000 mm; OCD: 1/100 mm, y para cima).
 """
+import math
+
 from qgis.core import (
     QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsPointXY,
     QgsProject,
@@ -17,7 +19,8 @@ from qgis.PyQt.QtGui import QTransform
 from typing import Iterable, Optional, Tuple
 
 from .geo import (
-    convergencia_utm, codigo_grade_zona, meridiano_central, zona_utm_de_epsg,
+    convergencia_utm, codigo_grade_zona, linhas_norte, meridiano_central,
+    zona_utm_de_epsg,
 )
 
 COR_CURVA = (0.0, 0.56, 1.0, 0.18)
@@ -114,6 +117,29 @@ class ProjetoOcad:
                 codigos[i] if codigos else str(CODIGO_SIMBOLO))
 
         self.satelite = self._preparar_satelite(satelite)
+        self.linhas_norte_mm = []
+        self.codigo_norte = None
+
+    def definir_linhas_norte(
+            self,
+            poligono_folha: Iterable[Tuple[float, float]],
+            espacamento_mm: float,
+            codigo: str) -> int:
+        """Gera as linhas de norte magnético cobrindo a folha.
+
+        Args:
+            poligono_folha: Contorno da folha em UTM (metros).
+            espacamento_mm: Espaçamento no papel (``geo.espacamento_norte_mm``).
+            codigo: Código do símbolo de linha de norte no symbol set
+                (``simbologia.CODIGO_LINHA_NORTE``).
+
+        Returns:
+            int: Quantidade de linhas geradas.
+        """
+        contorno = [self.mapa_mm(e, n) for e, n in poligono_folha]
+        self.linhas_norte_mm = linhas_norte(contorno, espacamento_mm)
+        self.codigo_norte = codigo
+        return len(self.linhas_norte_mm)
 
     def mapa_mm(self, e: float, n: float) -> Tuple[float, float]:
         """Ponto do mundo (UTM) → papel do mapa em mm (y para baixo)."""
@@ -121,15 +147,25 @@ class ProjetoOcad:
         return p.x(), p.y()
 
     def _preparar_satelite(self, sat: Optional[dict]) -> Optional[dict]:
-        """Acrescenta ao dict do satélite o posicionamento de papel do OCD
-        (centro em mm e tamanho do pixel em mm)."""
+        """Acrescenta ao dict do satélite o posicionamento de papel do OCD:
+        centro em mm, tamanho do pixel em mm e ângulo da imagem no papel.
+
+        Aceita o geotransform completo (``gt``, com termos de rotação — imagem
+        já alinhada ao papel) ou só ``ulx/uly/px/py`` (imagem norte-acima).
+        O ângulo é a grivação mais a rotação da própria imagem no mundo: 0
+        para a imagem alinhada ao papel, a grivação para a norte-acima.
+        """
         if not sat:
             return None
-        cx = sat['ulx'] + (sat['w'] / 2.0) * sat['px']
-        cy = sat['uly'] + (sat['h'] / 2.0) * sat['py']
+        gt = sat.get('gt') or (sat['ulx'], sat['px'], 0.0,
+                               sat['uly'], 0.0, sat['py'])
+        w, h = sat['w'], sat['h']
+        cx = gt[0] + gt[1] * w / 2.0 + gt[2] * h / 2.0
+        cy = gt[3] + gt[4] * w / 2.0 + gt[5] * h / 2.0
         mcx, mcy = self.mapa_mm(cx, cy)
         sat = dict(sat)
         sat['centro_mm'] = (mcx, mcy)
-        sat['u_mm'] = sat['px'] * 1000.0 / self.escala
-        sat['v_mm'] = abs(sat['py']) * 1000.0 / self.escala
+        sat['u_mm'] = math.hypot(gt[1], gt[4]) * 1000.0 / self.escala
+        sat['v_mm'] = math.hypot(gt[2], gt[5]) * 1000.0 / self.escala
+        sat['angulo'] = self.grivacao + math.degrees(math.atan2(gt[4], gt[1]))
         return sat

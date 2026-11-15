@@ -251,18 +251,48 @@ def instrucoes(chave: str) -> str:
     if chave == 'definir_local':
         return (
             _passos([
+                (tr('Escolha o tipo de mapa'),
+                 tr('<b>Sprint</b>, <b>Floresta</b> ou <b>Escolar</b> já '
+                    'preenchem escala e papel, e definem a norma e a '
+                    'equidistância dos passos seguintes. <b>Personalizado</b> '
+                    'deixa tudo livre.')),
                 (tr('Cole a coordenada'),
                  tr('Lat, Lon do Google Maps — o campo já vem com o centro da '
                     'vista atual.')),
-                (tr('Escolha escala e folha'),
-                 tr('Defina a escala e o tamanho da folha (A3 / A4 / A5).')),
+                (tr('Confira escala e folha'),
+                 tr('Ajuste a escala e o tamanho da folha (A3 / A4 / A5) se '
+                    'quiser.')),
                 (tr('Crie a folha'),
                  tr('Confira a <b>área no terreno</b> e clique em <b>Criar '
                     'Folha</b>.')),
             ])
             + _esp()
             + _dica(tr('O projeto é configurado em <b>UTM</b> e a camada '
-                       '<b>folha</b> é criada.'))
+                       '<b>folha</b> nasce girada para o <b>norte '
+                       'magnético</b> (declinação calculada sem internet) — no '
+                       'OCAD ela fica em pé.'))
+        )
+    if chave == 'ajustar_folha':
+        return (
+            _passos([
+                (tr('Mude escala, papel ou orientação'),
+                 tr('O contorno <b>laranja</b> mostra no mapa a folha que vai '
+                    'ficar.')),
+                (tr('Mova a folha'),
+                 tr('Em <b>Mover no mapa…</b> o contorno segue o mouse; clique '
+                    'para fixar (botão direito ou Esc cancela).')),
+                (tr('Ou ajuste ao limite'),
+                 tr('Escolha a camada do limite e clique em <b>Ajustar</b>: o '
+                    'plugin acha papel, orientação e posição que cabem, com 5 '
+                    'mm de folga. Se precisar, aumenta o papel — a escala só '
+                    'muda se você aceitar.')),
+                (tr('Aplique'),
+                 tr('A camada <b>folha</b> é atualizada, sempre girada para o '
+                    'norte magnético.')),
+            ])
+            + _esp()
+            + _dica(tr('Se já tinha gerado <b>curvas</b> ou exportado o '
+                       'projeto, refaça essas etapas para a nova folha.'))
         )
     if chave == 'configuracoes':
         return (
@@ -320,13 +350,16 @@ def instrucoes(chave: str) -> str:
             + _secao(tr('Já vem configurado'))
             + _bullets([
                 tr('<b>Georreferência</b> (UTM, escala e grade) e '
-                   '<b>declinação magnética</b> (automática via WMM/NOAA, ou '
-                   'manual).'),
+                   '<b>declinação magnética</b> (a mesma que girou a folha no '
+                   'Definir Local).'),
                 tr('O <b>satélite</b> como mapa de fundo georreferenciado.'),
                 tr('As <b>curvas de nível</b> já como objetos de linha '
                    '(mestras no símbolo 102 a cada 5ª equidistância).'),
                 tr('A <b>paleta de símbolos oficial</b> (ISOM 2017-2 ou '
                    'ISSprOM 2019-2) pronta para desenhar.'),
+                tr('As <b>linhas de norte magnético</b> (símbolo 601, no '
+                   'espaçamento da norma), uma por objeto — dá para cortar '
+                   'onde esconderem detalhes.'),
             ])
             + _esp()
             + _dica(tr('Posicione a folha e salve as edições antes de gerar. '

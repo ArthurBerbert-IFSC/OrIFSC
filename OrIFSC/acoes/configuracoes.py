@@ -15,6 +15,7 @@ from typing import Any
 from qgis.core import QgsSettings
 from qgis.PyQt.QtWidgets import (
     QDialog, QFormLayout, QVBoxLayout, QHBoxLayout, QComboBox, QSpinBox,
+    QDoubleSpinBox,
     QLineEdit, QPushButton, QDialogButtonBox, QFileDialog,
 )
 
@@ -37,9 +38,10 @@ PADROES = {
     'escala_padrao': 10000,
     'folha_padrao': 'A4',
     'orientacao_padrao': 'Paisagem',
-    'equidistancia_padrao': 5,
+    'equidistancia_padrao': 5.0,
     'simbologia_padrao': SIMBOLOGIAS[0],
     'pasta_saida': '',
+    'tipo_mapa_ultimo': 'personalizado',
 }
 
 
@@ -71,14 +73,14 @@ def ler_escala_padrao() -> int:
         return PADROES['escala_padrao']
 
 
-def ler_equidistancia_padrao() -> int:
+def ler_equidistancia_padrao() -> float:
     """Retorna a equidistância padrão de curvas em metros.
 
     Returns:
-        int: Equidistância padrão.
+        float: Equidistância padrão (aceita decimais, ex.: 2,5 m em sprint).
     """
     try:
-        return int(_get('equidistancia_padrao'))
+        return float(_get('equidistancia_padrao'))
     except (TypeError, ValueError):
         return PADROES['equidistancia_padrao']
 
@@ -118,9 +120,16 @@ def indice_simbologia_padrao() -> int:
         int: 0 = ISOM, 1 = ISSprOM, 2 = Nenhuma (ordem do diálogo de
         exportação).
 
-    Quando a preferência é 'Automática', sugere pela escala do projeto
-    atual: sprints (denominador <= 5.000) usam ISSprOM; o resto, ISOM.
+    O tipo de mapa do projeto (Sprint/Floresta/Escolar) tem prioridade: é
+    a escolha mais específica. Sem tipo (ou Personalizado), vale a
+    preferência global; se ela for 'Automática', sugere pela escala do
+    projeto atual: sprints (denominador <= 5.000) usam ISSprOM; o resto, ISOM.
     """
+    from ..algorithms.ocad.tipos_mapa import NORMA_ISOM, tem_predefinicao
+    from .comum import ler_tipo_mapa
+    tipo = ler_tipo_mapa()
+    if tem_predefinicao(tipo):
+        return 0 if tipo.norma == NORMA_ISOM else 1
     pref = ler_simbologia_padrao()
     if pref == SIMBOLOGIAS[1]:
         return 0
@@ -133,6 +142,16 @@ def indice_simbologia_padrao() -> int:
     if escala and int(escala) <= 5000:
         return 1
     return 0
+
+
+def ler_tipo_mapa_ultimo() -> str:
+    """Id do último tipo de mapa usado no Definir Local (vale entre projetos)."""
+    return str(_get('tipo_mapa_ultimo'))
+
+
+def salvar_tipo_mapa_ultimo(tipo_id: str) -> None:
+    """Lembra o tipo de mapa para pré-selecionar no próximo projeto."""
+    QgsSettings().setValue(PREFIXO + 'tipo_mapa_ultimo', str(tipo_id))
 
 
 def ler_pasta_saida() -> str:
@@ -179,8 +198,10 @@ class DialogConfiguracoes(QDialog):
             self.orientacao_combo.addItem(tr(ori), ori)
         form.addRow(tr('Orientação padrão:'), self.orientacao_combo)
 
-        self.equi_spin = QSpinBox()
-        self.equi_spin.setRange(1, 100)
+        self.equi_spin = QDoubleSpinBox()
+        self.equi_spin.setDecimals(1)
+        self.equi_spin.setRange(0.5, 100.0)
+        self.equi_spin.setSingleStep(0.5)
         self.equi_spin.setSuffix(' m')
         form.addRow(tr('Equidistância padrão:'), self.equi_spin)
 
@@ -259,7 +280,7 @@ class DialogConfiguracoes(QDialog):
             PREFIXO + 'orientacao_padrao',
             self.orientacao_combo.currentData())
         s.setValue(PREFIXO + 'equidistancia_padrao',
-                   int(self.equi_spin.value()))
+                   float(self.equi_spin.value()))
         s.setValue(PREFIXO + 'simbologia_padrao',
                    self.simb_combo.currentData())
         s.setValue(PREFIXO + 'pasta_saida', self.pasta_edit.text())

@@ -4,7 +4,7 @@ Os passos são ações independentes do menu, então os parâmetros definidos no
 Passo 2 (EPSG e o retângulo da folha) ficam guardados como propriedades do
 projeto — sobrevivem a salvar/reabrir o .qgz.
 """
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from qgis.core import QgsProject, QgsVectorLayer, Qgis
 from qgis.PyQt.QtWidgets import QMessageBox
@@ -26,14 +26,101 @@ PAPEL_LIMITE = 'limite'
 _NOMES_CURVAS = ('urva', 'contour', 'eğri', 'egri')
 
 
-def salvar_folha(epsg: int, x0: float, y0: float, x1: float, y1: float) -> None:
-    """Grava no projeto o EPSG UTM e o retângulo da folha (definidos no Passo 2)."""
+def salvar_folha(epsg: int, ref_e: float, ref_n: float, larg_mm: float,
+                 alt_mm: float, escala: int, grivacao: float) -> None:
+    """Grava no projeto a folha girada para o norte magnético.
+
+    Guarda o centro (UTM), o tamanho do papel (mm), a escala e a grivação
+    com que a folha foi girada, mais o retângulo envolvente (``folha_x0..y1``)
+    que os passos antigos e a verificação de projeto configurado já usam.
+    """
+    from ..algorithms.ocad.geo import cantos_folha
+    cantos = cantos_folha(ref_e, ref_n, larg_mm, alt_mm, escala, grivacao)
+    es = [e for e, _ in cantos]
+    ns = [n for _, n in cantos]
     proj = QgsProject.instance()
     proj.writeEntry(ESCOPO, 'epsg', int(epsg))
-    proj.writeEntryDouble(ESCOPO, 'folha_x0', float(x0))
-    proj.writeEntryDouble(ESCOPO, 'folha_y0', float(y0))
-    proj.writeEntryDouble(ESCOPO, 'folha_x1', float(x1))
-    proj.writeEntryDouble(ESCOPO, 'folha_y1', float(y1))
+    proj.writeEntryDouble(ESCOPO, 'folha_x0', float(min(es)))
+    proj.writeEntryDouble(ESCOPO, 'folha_y0', float(min(ns)))
+    proj.writeEntryDouble(ESCOPO, 'folha_x1', float(max(es)))
+    proj.writeEntryDouble(ESCOPO, 'folha_y1', float(max(ns)))
+    proj.writeEntryDouble(ESCOPO, 'folha_ref_e', float(ref_e))
+    proj.writeEntryDouble(ESCOPO, 'folha_ref_n', float(ref_n))
+    proj.writeEntryDouble(ESCOPO, 'folha_larg_mm', float(larg_mm))
+    proj.writeEntryDouble(ESCOPO, 'folha_alt_mm', float(alt_mm))
+    proj.writeEntryDouble(ESCOPO, 'folha_grivacao', float(grivacao))
+    revisao, _ = proj.readNumEntry(ESCOPO, 'folha_revisao', 0)
+    proj.writeEntry(ESCOPO, 'folha_revisao', int(revisao) + 1)
+
+
+def ler_folha_revisao() -> int:
+    """Contador que sobe a cada vez que a folha é criada ou ajustada.
+
+    Permite saber se curvas/exportação foram feitas para a folha atual
+    (etapas "desatualizadas" do painel assistente).
+    """
+    revisao, ok = QgsProject.instance().readNumEntry(
+        ESCOPO, 'folha_revisao', 0)
+    return int(revisao) if ok else 0
+
+
+def ler_folha_girada() -> Optional[Dict[str, Any]]:
+    """Parâmetros da folha girada, ou None (projeto da 0.1.x ou sem folha).
+
+    Chaves: epsg, ref_e, ref_n, larg_mm, alt_mm, escala, grivacao, cantos
+    (4 pontos UTM, a partir do superior-esquerdo, sentido horário).
+    """
+    estado = ler_folha()
+    escala = ler_escala()
+    if estado is None or escala is None:
+        return None
+    proj = QgsProject.instance()
+    valores = {}
+    for chave in ('ref_e', 'ref_n', 'larg_mm', 'alt_mm', 'grivacao'):
+        valor, ok = proj.readDoubleEntry(ESCOPO, 'folha_' + chave, 0.0)
+        if not ok:
+            return None
+        valores[chave] = valor
+    from ..algorithms.ocad.geo import cantos_folha
+    valores['epsg'] = estado[0]
+    valores['escala'] = escala
+    valores['cantos'] = cantos_folha(
+        valores['ref_e'], valores['ref_n'], valores['larg_mm'],
+        valores['alt_mm'], escala, valores['grivacao'])
+    return valores
+
+
+# Origem da declinação gravada no projeto: valor fixo em português (é dado
+# persistido, não texto de tela); a tela mostra ``rotulo_origem``.
+ORIGEM_MANUAL = 'manual'
+PREFIXO_ORIGEM_WMM = 'WMM em '
+
+
+def rotulo_origem(origem: str) -> str:
+    """Origem da declinação (gravada em português) para exibição."""
+    if origem == ORIGEM_MANUAL:
+        return tr('valor manual')
+    if origem.startswith(PREFIXO_ORIGEM_WMM):
+        return tr('WMM em {data}', data=origem[len(PREFIXO_ORIGEM_WMM):])
+    return origem
+
+
+def salvar_declinacao(declinacao: float, origem: str) -> None:
+    """Grava a declinação usada para girar a folha e de onde ela veio
+    (ex.: 'WMM-2025 em 14/11/2026' ou 'manual')."""
+    proj = QgsProject.instance()
+    proj.writeEntryDouble(ESCOPO, 'declinacao', float(declinacao))
+    proj.writeEntry(ESCOPO, 'declinacao_origem', str(origem))
+
+
+def ler_declinacao() -> Optional[Tuple[float, str]]:
+    """(declinação em graus, origem) salva no Definir Local, ou None."""
+    proj = QgsProject.instance()
+    valor, ok = proj.readDoubleEntry(ESCOPO, 'declinacao', 0.0)
+    if not ok:
+        return None
+    origem, _ = proj.readEntry(ESCOPO, 'declinacao_origem', '')
+    return valor, origem
 
 
 def salvar_escala(escala: int) -> None:
@@ -59,6 +146,62 @@ def ler_folha() -> Optional[Tuple[int, float, float, float, float]]:
     x1, _ = proj.readDoubleEntry(ESCOPO, 'folha_x1', 0.0)
     y1, _ = proj.readDoubleEntry(ESCOPO, 'folha_y1', 0.0)
     return epsg, x0, y0, x1, y1
+
+
+def marcar_curvas_geradas() -> None:
+    """Registra que as curvas foram geradas para a folha atual.
+
+    Guarda a revisão da folha naquele momento e incrementa um contador de
+    gerações (a exportação compara com ele para saber se ficou para trás).
+    """
+    proj = QgsProject.instance()
+    geracao, _ = proj.readNumEntry(ESCOPO, 'curvas_geracao', 0)
+    proj.writeEntry(ESCOPO, 'curvas_geracao', int(geracao) + 1)
+    proj.writeEntry(ESCOPO, 'curvas_folha_revisao', ler_folha_revisao())
+
+
+def marcar_exportacao(pasta: str) -> None:
+    """Registra a exportação: revisão da folha, geração das curvas e pasta."""
+    proj = QgsProject.instance()
+    geracao, _ = proj.readNumEntry(ESCOPO, 'curvas_geracao', 0)
+    proj.writeEntry(ESCOPO, 'exportacao_folha_revisao', ler_folha_revisao())
+    proj.writeEntry(ESCOPO, 'exportacao_curvas_geracao', int(geracao))
+    proj.writeEntry(ESCOPO, 'exportacao_pasta', str(pasta))
+
+
+def ler_marcas() -> Dict[str, Any]:
+    """Registros de geração de curvas e exportação (None = nunca registrado).
+
+    Chaves: curvas_folha_revisao, curvas_geracao, exportacao_folha_revisao,
+    exportacao_curvas_geracao, exportacao_pasta.
+    """
+    proj = QgsProject.instance()
+
+    def numero(chave: str) -> Optional[int]:
+        valor, ok = proj.readNumEntry(ESCOPO, chave, 0)
+        return int(valor) if ok else None
+
+    pasta, _ = proj.readEntry(ESCOPO, 'exportacao_pasta', '')
+    return {
+        'curvas_folha_revisao': numero('curvas_folha_revisao'),
+        'curvas_geracao': numero('curvas_geracao') or 0,
+        'exportacao_folha_revisao': numero('exportacao_folha_revisao'),
+        'exportacao_curvas_geracao': numero('exportacao_curvas_geracao'),
+        'exportacao_pasta': pasta,
+    }
+
+
+def salvar_tipo_mapa(tipo_id: str) -> None:
+    """Grava o tipo de mapa escolhido no Definir Local (sprint, floresta,
+    escolar ou personalizado)."""
+    QgsProject.instance().writeEntry(ESCOPO, 'tipo_mapa', str(tipo_id))
+
+
+def ler_tipo_mapa() -> Any:
+    """``TipoMapa`` do projeto, ou None (projeto sem tipo salvo)."""
+    from ..algorithms.ocad.tipos_mapa import tipo_por_id
+    tipo_id, ok = QgsProject.instance().readEntry(ESCOPO, 'tipo_mapa', '')
+    return tipo_por_id(tipo_id) if ok else None
 
 
 def projeto_configurado() -> bool:

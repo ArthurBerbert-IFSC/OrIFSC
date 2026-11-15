@@ -28,6 +28,15 @@ CODIGO_CURVA = '101'
 CODIGO_CURVA_MESTRA = '102'
 FATOR_MESTRA = 5
 
+# Linha de norte magnético preta (símbolo de linha) em cada symbol set
+# embutido. O código difere entre as normas: na ISSprOM o 601.1 é o padrão de
+# ÁREA ("North lines pattern") — por isso o mapa explícito, conferido contra
+# os arquivos em tests/test_linhas_norte.py.
+CODIGO_LINHA_NORTE = {
+    NORMA_ISOM: '601.1',
+    NORMA_ISSPROM: '601',
+}
+
 _DIR_SIMBOLOGIAS = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     '..', '..', 'recursos', 'simbologias'))
@@ -186,6 +195,15 @@ def escrever_omap_com_simbologia(proj: Any, caminho: str,
                          % arquivo_base)
     id_mestra = ids.get(CODIGO_CURVA_MESTRA, id_curva)
 
+    linhas_norte = list(getattr(proj, 'linhas_norte_mm', None) or [])
+    id_norte = None
+    if linhas_norte:
+        codigo_norte = getattr(proj, 'codigo_norte', None)
+        id_norte = ids.get(codigo_norte)
+        if id_norte is None:
+            raise ValueError('Symbol set sem a linha de norte (code="%s"): %s'
+                             % (codigo_norte, arquivo_base))
+
     partes = container.find(f'{NS}parts')
     if partes is None or len(partes) == 0:
         raise ValueError('Symbol set sem <parts>: %s' % arquivo_base)
@@ -195,9 +213,10 @@ def escrever_omap_com_simbologia(proj: Any, caminho: str,
     for filho in list(objetos):
         objetos.remove(filho)
     codigos = _codigos_das_linhas(proj)
-    objetos.set('count', '%d' % len(proj.linhas_mm))
-    for linha, codigo in zip(proj.linhas_mm, codigos):
-        simbolo = id_mestra if codigo == CODIGO_CURVA_MESTRA else id_curva
+    objetos.set('count', '%d' % (len(proj.linhas_mm) + len(linhas_norte)))
+    simbolos = [id_mestra if codigo == CODIGO_CURVA_MESTRA else id_curva
+                for codigo in codigos] + [id_norte] * len(linhas_norte)
+    for linha, simbolo in zip(list(proj.linhas_mm) + linhas_norte, simbolos):
         obj = ET.SubElement(objetos, f'{NS}object',
                             {'type': '1', 'symbol': simbolo})
         coords = ET.SubElement(obj, f'{NS}coords',

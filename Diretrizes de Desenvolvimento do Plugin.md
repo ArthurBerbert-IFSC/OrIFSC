@@ -18,7 +18,8 @@
   - `utils.py`: utilitários comuns — ocultar algoritmos da toolbox e cache persistente (`dir_cache`/`podar_cache`).
 - **Núcleo de exportação OCAD/OOM** (`OrIFSC\algorithms\ocad\*.py`):
   - modelo comum (`projeto.py`);
-  - cálculos geográficos (`geo.py`);
+  - cálculos geográficos (`geo.py`): convergência, grivação e geometria da folha girada;
+  - declinação magnética offline (`wmm.py`): World Magnetic Model com os coeficientes oficiais em `recursos/wmm/` — módulo puro, sem QGIS;
   - escritores de arquivo (`ocd.py`, `omap.py`);
   - simbologia oficial embutida (`simbologia.py`): injeção do projeto nos
     symbol sets do OOM (`recursos/simbologias/`) — módulo puro, sem QGIS.
@@ -58,6 +59,24 @@
    - Para o `.ocd`, a paleta vem de um **arquivo doador OCD v9/v10** gerado uma única vez exportando o symbol set no próprio OOM (v9 é normalizado para v10 no cabeçalho). **Arquivos de simbologia do OCAD não podem ser redistribuídos** — o doador tem que derivar do OOM. Se o doador não existir, a exportação degrada com aviso para o símbolo único (nunca falha por isso).
    - Curvas mestras: elevação (ELEV) múltipla de 5x a equidistância → símbolo 102; a equidistância é **deduzida dos próprios dados** (menor diferença entre elevações distintas), sem depender de configuração.
    - Ao atualizar os symbol sets para uma nova versão do OOM: baixar da tag correspondente, regenerar os doadores `.ocd` e atualizar `PROVENIENCIA.txt`.
+   - **Linhas de norte magnético**: linhas separadas no símbolo de linha preta da norma, localizado pelo código em `simbologia.CODIGO_LINHA_NORTE` — **o código muda entre as normas** (ISOM `601.1`; ISSprOM `601`, onde `601.1` é o padrão de área). Espaçamento em `geo.espacamento_norte_mm` (texto das normas). O teste `tests/test_linhas_norte.py` confere o código contra os arquivos embutidos; ao trocar de symbol set, rode-o.
+
+11. **Folha orientada ao norte magnético**
+   - O papel do OCAD/OOM é orientado ao norte magnético (grivação = declinação − convergência meridiana). Por isso a folha **nasce girada** pela grivação no "Definir Local" (`geo.cantos_folha`), e não alinhada à quadrícula UTM — senão ela aparece inclinada no OCAD, com cantos vazios (problema da 0.1.x).
+   - A declinação é calculada **uma vez, na criação da folha** (WMM offline ou valor manual) e salva no projeto (`comum.salvar_declinacao`); a exportação usa **essa mesma** declinação por padrão. Exportar com outra declinação gera aviso, porque a folha ficaria inclinada pela diferença.
+   - `geo.papel_para_mundo` reproduz exatamente o `QTransform` de `ProjetoOcad`; qualquer mudança em um exige a mesma mudança no outro (o teste `tests/test_folha_girada.py` confere a equivalência quando o PyQt5 está disponível).
+   - Projetos da 0.1.x (sem `folha_grivacao` salvo) continuam funcionando com a folha alinhada à quadrícula; a exportação avisa e sugere refazer o "Definir Local" (ou ajustar a folha, que a converte).
+   - **Uma única camada `folha`**: criar, recriar ou ajustar a folha passa sempre por `criar_folha.aplicar_folha`, que grava o estado e **atualiza** a camada existente (reconhecida pela propriedade de papel `orifsc/papel = folha`, via `comum.camada_folha` — ver seção 5) em vez de adicionar outra. Cada gravação incrementa `folha_revisao` no projeto.
+   - O GeoTIFF do satélite sai **alinhado ao papel** (norte magnético para cima), cobrindo só a folha + 2 mm (`geo.grade_papel`). A rotação acontece dentro da MESMA reprojeção Web Mercator → UTM (uma única reamostragem Lanczos, para um raster intermediário com geotransform girado; depois `gdal.Translate` só copia para o TIFF final do OCAD 10). Assim o TIFF não carrega o retângulo envolvente da folha girada (~1,65x a área). No `.ocd` a imagem entra com ângulo 0 (`ProjetoOcad._preparar_satelite` calcula o ângulo a partir do geotransform completo); para o OOM, o `TFW=YES` grava o world file com a rotação. Folhas de projetos 0.1.x (ou outro polígono escolhido) saem norte-acima, como antes.
+
+12. **Tipo de mapa define os padrões do projeto**
+   - Os tipos (Sprint, Floresta, Escolar, Personalizado) ficam em `algorithms/ocad/tipos_mapa.py` (módulo puro). O tipo escolhido no Definir Local é salvo no projeto (`comum.salvar_tipo_mapa`).
+   - Precedência dos padrões: **tipo do projeto** (se tiver predefinição) → **Configurações** globais → valores do plugin. Vale para a equidistância de Gerar Curvas (`_equidistancia_padrao`) e a simbologia da exportação (`indice_simbologia_padrao`). São sempre padrões editáveis no diálogo, nunca valores forçados.
+
+13. **Assistente guia, não bloqueia**
+   - O estado das etapas é calculado num módulo puro (`acoes/etapas.py`, testado sem QGIS) a partir de uma `Situacao` lida do projeto (`assistente.situacao_do_projeto`). O painel (`acoes/assistente.py`) e o ✓/▶/⚠ do menu usam a **mesma** função — não duplicar regras de estado em outro lugar.
+   - "Desatualizado" usa marcas gravadas no projeto: `folha_revisao` (sobe a cada folha gravada), `curvas_folha_revisao`/`curvas_geracao` (gravadas por `comum.marcar_curvas_geradas` quando o diálogo de curvas termina com resultado) e `exportacao_*` (`comum.marcar_exportacao`). Curvas sem marca (projetos antigos) contam como em dia.
+   - Toda etapa mantém ações clicáveis; avisos explicam, nunca impedem.
 
 ## 3. Comunicação entre módulos
 
@@ -90,6 +109,7 @@
 - Reutilize `acoes/comum.py` e `acoes/configuracoes.py` para qualquer novo estado.
 - Documente decisões técnicas importantes em docstrings (não em comentários longos soltos).
 - **Todo texto visível ao usuário passa por `tr()`** (menus, diálogos, painéis, parâmetros e mensagens de Processing, message bar, log). Valores dinâmicos entram por **placeholders nomeados** (`tr('{n} curva(s) lida(s).', n=total)`), para o tradutor poder reordenar a frase. Textos montados no nível do módulo viram função ou usam `N_()` + `tr(valor)` na exibição — senão ficam congelados no idioma do momento do import.
+- Módulos puros que precisam ser carregados isolados nos testes (ex.: `acoes/etapas.py`, `algorithms/ocad/tipos_mapa.py`) marcam os textos com um `N_` **local** (mesmo nome, o extrator reconhece) e a tela traduz com `tr(texto, **valores)`; valores dinâmicos ficam fora da chave, em placeholders.
 - Ao criar ou mudar um texto: `python tools/i18n_atualizar.py` (adiciona a chave nova nos catálogos, com valor vazio) e traduza em `en.json` e `tr.json`; `--podar` remove chaves que saíram do código. O teste `tests/test_i18n.py` falha se faltar tradução, sobrar chave órfã ou se a tradução perder placeholders/tags HTML.
 
 ### Não faça
@@ -122,5 +142,5 @@
 
 - **OCAD 10 (32 bits)**: lê apenas TIFF RGB de 3 bandas, LZW ou sem compressão, organização em strips (`TILED=NO`) e arquivo < 2 GB; sem canal alpha. O limite `MAX_PX=16384` por lado em `exportar_ocad.py` deriva disso — é limite técnico, não ajuste de qualidade.
 - **Tiles do Google (`mt*.google.com`)**: o download automatizado (scraping de endpoint não oficial), o salvamento offline em GeoTIFF e a vetorização de mapa por cima da imagem violam os Termos de Serviço do Google Maps. **Atribuição/referência não autoriza esses usos** — a restrição é contratual, não de crédito. Riscos, em ordem realista: sinalização/remoção do plugin no repositório oficial do QGIS; bloqueio técnico do endpoint pelo Google (quebra silenciosa da funcionalidade); ação legal contra usuários finais (teórico nessa escala). **Decisão registrada (julho/2026)**: manter a funcionalidade com o risco documentado; preferir e promover a ortofoto do SIG@SC como fundo quando a área for em Santa Catarina; não expandir o uso do Google em novas funcionalidades.
-- **NOAA/WMM (declinação)**: usa a chave pública de demonstração; se falhar, degrada para o valor manual informado no diálogo (comportamento intencional).
+- **WMM (declinação)**: calculada offline com o WMM2025 embutido (`recursos/wmm/WMM2025.COF`, domínio público), válido até 31/12/2029. Fora da validade o valor ainda é calculado, com aviso ao usuário. **Atualizar para o WMM2030** quando for publicado (dez/2029) — ver `recursos/wmm/PROVENIENCIA.txt`. A antiga consulta à API da NOAA (chave de demonstração) foi removida.
 - **SIG@SC**: serviço lento/instável; toda chamada precisa de timeout e mensagem clara ao usuário, sem fallback implícito para outra fonte.

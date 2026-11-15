@@ -137,3 +137,16 @@ def test_formatar_inteiro(i18n):
 def test_sem_qgis_preferencia_e_automatica(i18n):
     # Fora do QGIS não há QgsSettings: a preferência cai em 'auto'.
     assert i18n.preferencia_idioma() == i18n.AUTO
+
+
+def test_formatar_decimal_e_graus(i18n):
+    i18n.definir_idioma_ativo('en')
+    assert i18n.formatar_decimal(2.5, 1) == '2.5'
+    assert i18n.formatar_decimal(5.0, 1) == '5'
+    assert i18n.formatar_graus(-20.075) == '-20.07°' or \
+        i18n.formatar_graus(-20.075) == '-20.08°'
+    for codigo in ('pt', 'tr'):
+        i18n.definir_idioma_ativo(codigo)
+        assert i18n.formatar_decimal(2.5, 1) == '2,5'
+        assert i18n.formatar_decimal(2.0, 1) == '2'
+        assert i18n.formatar_graus(-18.9388) == '-18,94°'

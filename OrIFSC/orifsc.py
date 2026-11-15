@@ -2,14 +2,18 @@
 
 import os
 from typing import Any, Dict, List, Optional
-from qgis.PyQt.QtCore import QTimer
+from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMenu
-from qgis.core import QgsApplication, Qgis
+from qgis.core import QgsApplication, QgsSettings, Qgis
 from .i18n import tr
 from .provider import OrIFSCProvider
 
 SEP = object()
+
+# Preferência global: o assistente estava aberto da última vez? (ausente =
+# primeira vez → abre sozinho; decisão de nov/2026).
+CHAVE_ASSISTENTE_VISIVEL = 'OrIFSC/assistente_visivel'
 
 ICONS_DIR = os.path.join(os.path.dirname(__file__), 'icons')
 
@@ -38,12 +42,15 @@ class OrIFSCPlugin:
         self.acoes_por_id: Dict[str, QAction] = {}
         self._titulos_base: Dict[str, str] = {}
         self.provider: Optional[OrIFSCProvider] = None
+        self._dlg_ajustar: Any = None
+        self.assistente: Any = None
 
     def initGui(self) -> None:
         """Inicializa provider, constrói o menu e conecta atualização de status."""
         self.provider = OrIFSCProvider()
         QgsApplication.processingRegistry().addProvider(self.provider)
         self._criar_menu()
+        self._criar_assistente()
 
     def _criar_menu(self, antes: Optional[QAction] = None) -> None:
         """Cria o menu OrIFSC na barra do QGIS, no idioma ativo do plugin.
@@ -70,6 +77,71 @@ class OrIFSCPlugin:
         self._construir_menu_idioma(self.menu_orifsc)
 
         self.menu_orifsc.aboutToShow.connect(self._atualizar_status_menu)
+        self._inserir_acao_assistente()
+
+    def _inserir_acao_assistente(self) -> None:
+        """Põe o botão do assistente no topo do menu OrIFSC (o painel é
+        criado uma vez só; o menu é recriado a cada troca de idioma)."""
+        if self.assistente is None or self.menu_orifsc is None:
+            return
+        acoes_menu = self.menu_orifsc.actions()
+        primeira = acoes_menu[0] if acoes_menu else None
+        self.menu_orifsc.insertAction(primeira,
+                                      self.assistente.toggleViewAction())
+        self.menu_orifsc.insertSeparator(primeira)
+
+    def _traduzir_assistente(self) -> None:
+        """Textos do painel e do botão no idioma ativo do plugin."""
+        if self.assistente is None:
+            return
+        self.assistente.setWindowTitle(tr('Assistente OrIFSC'))
+        acao = self.assistente.toggleViewAction()
+        acao.setText(tr('Assistente OrIFSC'))
+        acao.setToolTip(
+            tr('Mostrar/ocultar o Assistente OrIFSC (etapas do mapa)'))
+        self.assistente.atualizar()
+
+    def _criar_assistente(self) -> None:
+        """Painel lateral do assistente + botão na barra e no topo do menu.
+
+        Criado uma única vez (no ``initGui``). Abre sozinho na primeira vez;
+        depois vale o que a pessoa escolheu da última vez (fechar no X ou no
+        botão é lembrado entre sessões).
+        """
+        from .acoes.assistente import PainelAssistente
+        self.assistente = PainelAssistente({
+            'definir_local': self._definir_local,
+            'ajustar_folha': self._ajustar_folha,
+            'satelite': self._carregar_satelite,
+            'osm': self._base_osm,
+            'sigsc': self._sigsc_adicionar,
+            'limite': self._criar_limite,
+            'curvas': self._gerar_curvas,
+            'exportar': self._exportar_ocad,
+        }, self.iface.mainWindow())
+        self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,
+                                 self.assistente)
+
+        acao = self.assistente.toggleViewAction()
+        acao.setIcon(_icone('icon.svg'))
+        acao.triggered.connect(self._lembrar_assistente)
+        self.assistente.closed.connect(
+            lambda: self._lembrar_assistente(False))
+        self.iface.addToolBarIcon(acao)
+        self._traduzir_assistente()
+        self._inserir_acao_assistente()
+
+        valor = QgsSettings().value(CHAVE_ASSISTENTE_VISIVEL, None)
+        if valor is None:
+            visivel = True
+            self._lembrar_assistente(True)
+        else:
+            visivel = str(valor).lower() in ('true', '1')
+        self.assistente.setVisible(visivel)
+
+    def _lembrar_assistente(self, visivel: bool) -> None:
+        """Grava se o assistente fica aberto (vale para as próximas sessões)."""
+        QgsSettings().setValue(CHAVE_ASSISTENTE_VISIVEL, bool(visivel))
 
     def _reconstruir_menu(self) -> None:
         """Recria o menu no mesmo lugar da barra — usado ao trocar o idioma,
@@ -90,6 +162,7 @@ class OrIFSCPlugin:
         self.acoes_por_id.clear()
         self._titulos_base.clear()
         self._criar_menu(antes)
+        self._traduzir_assistente()
 
     def _construir_menu_idioma(self, menu: QMenu) -> None:
         """Submenu de idioma no fim do menu OrIFSC. O título sempre traz
@@ -142,6 +215,9 @@ class OrIFSCPlugin:
                  'slot': self._definir_local,
                  'icone': 'definir_local.svg',
                  'id': 'definir_local'},
+                {'titulo': tr('Ajustar Folha (mover, escala, papel)…'),
+                 'slot': self._ajustar_folha,
+                 'icone': 'definir_local.svg'},
                 {'titulo': tr('Camada de Limite'),
                  'slot': self._criar_limite,
                  'icone': 'criar_limite.svg'},
@@ -222,26 +298,20 @@ class OrIFSCPlugin:
         """Marca as etapas-chave do fluxo: ✓ concluída, ▶ próxima sugerida.
 
         Não altera o que está habilitado — todos os itens seguem clicáveis. É só
-        um guia visual, recalculado a cada abertura do menu a partir do estado
-        atual do projeto (folha definida? já há curvas?)."""
-        from .acoes.comum import projeto_configurado, tem_camada_curvas
-        definido = projeto_configurado()
-        tem_curvas = tem_camada_curvas()
-        if not definido:
-            proximo = 'definir_local'
-        elif not tem_curvas:
-            proximo = 'gerar_curvas'
-        else:
-            proximo = 'exportar'
-        feito = {'definir_local': definido, 'gerar_curvas': tem_curvas}
+        um guia visual, recalculado a cada abertura do menu com a mesma lógica
+        do Assistente (``acoes/etapas.py``), incluindo ⚠ para etapas
+        desatualizadas."""
+        from .acoes.assistente import situacao_do_projeto
+        from .acoes.etapas import AVISO, FEITO, PROXIMO, calcular_etapas
+        estados = {e.id: e.estado
+                   for e in calcular_etapas(situacao_do_projeto())}
+        etapa_do_menu = {'definir_local': 'local', 'gerar_curvas': 'curvas',
+                         'exportar': 'exportar'}
+        prefixo = {FEITO: '✓  ', PROXIMO: '▶  ', AVISO: '⚠  '}
         for aid, act in self.acoes_por_id.items():
             base = self._titulos_base.get(aid, act.text())
-            if feito.get(aid):
-                act.setText('✓  ' + base)
-            elif aid == proximo:
-                act.setText('▶  ' + base)
-            else:
-                act.setText(base)
+            estado = estados.get(etapa_do_menu.get(aid, ''))
+            act.setText(prefixo.get(estado, '') + base)
 
     def unload(self) -> None:
         """Remove menu, ações e provider de Processing ao descarregar.
@@ -249,6 +319,13 @@ class OrIFSCPlugin:
         As ações são parenteadas no menu, então o deleteLater() do menu
         remove tudo em cascata — sem referências órfãs entre recargas.
         """
+        self._fechar_ajustar()
+        if self.assistente is not None:
+            self.iface.removeToolBarIcon(self.assistente.toggleViewAction())
+            self.assistente.desconectar()
+            self.iface.removeDockWidget(self.assistente)
+            self.assistente.deleteLater()
+            self.assistente = None
         if self.menu_orifsc:
             self.menu_orifsc.deleteLater()
             self.menu_orifsc = None
@@ -271,6 +348,30 @@ class OrIFSCPlugin:
         from .acoes.definir_local import DialogDefinirLocal
         dlg = DialogDefinirLocal(self.iface, self.iface.mainWindow())
         dlg.exec()
+
+    def _fechar_ajustar(self) -> None:
+        """Fecha o Ajustar Folha aberto (limpa a prévia e a ferramenta)."""
+        if self._dlg_ajustar is not None:
+            try:
+                self._dlg_ajustar.close()
+            except RuntimeError:  # já destruído pelo Qt
+                pass
+            self._dlg_ajustar = None
+
+    def _ajustar_folha(self) -> None:
+        """Abre o Ajustar Folha (não modal, para poder clicar no mapa)."""
+        from .acoes.comum import (projeto_configurado,
+                                  avisar_projeto_nao_configurado)
+        if not projeto_configurado():
+            avisar_projeto_nao_configurado(self.iface)
+            return
+        from qgis.PyQt.QtCore import Qt
+        from .acoes.ajustar_folha import DialogAjustarFolha
+        self._fechar_ajustar()
+        dlg = DialogAjustarFolha(self.iface, self.iface.mainWindow())
+        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self._dlg_ajustar = dlg
+        dlg.show()
 
     def _criar_limite(self) -> None:
         """Cria a camada de limite do projeto atual.
@@ -334,7 +435,11 @@ class OrIFSCPlugin:
                 duration=8)
             return
         import processing
-        processing.execAlgorithmDialog('orifsc:gerar_curvas_nivel', {})
+        resultado = processing.execAlgorithmDialog(
+            'orifsc:gerar_curvas_nivel', {})
+        if resultado:
+            from .acoes.comum import marcar_curvas_geradas
+            marcar_curvas_geradas()
 
     def _sigsc_adicionar(self) -> None:
         """Executa o fluxo guiado de dados públicos do SIG@SC.
@@ -357,7 +462,8 @@ class OrIFSCPlugin:
         """
         from .acoes.comum import (projeto_configurado,
                                   avisar_projeto_nao_configurado,
-                                  camada_curvas, camada_folha)
+                                  camada_curvas, camada_folha,
+                                  marcar_exportacao)
         from .acoes.configuracoes import ler_pasta_saida
         if not projeto_configurado():
             avisar_projeto_nao_configurado(self.iface)
@@ -375,7 +481,11 @@ class OrIFSCPlugin:
             params['PASTA'] = pasta
 
         import processing
-        processing.execAlgorithmDialog('orifsc:exportar_ocad', params)
+        resultado = processing.execAlgorithmDialog(
+            'orifsc:exportar_ocad', params) or {}
+        gerado = resultado.get('OCD') or resultado.get('OMAP')
+        if gerado:
+            marcar_exportacao(os.path.dirname(gerado))
 
     def _configuracoes(self) -> None:
         """Abre o diálogo de configurações globais; se o idioma mudou,

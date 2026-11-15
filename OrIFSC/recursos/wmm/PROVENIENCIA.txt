@@ -1,0 +1,30 @@
+Modelo magnético embutido no OrIFSC
+===================================
+
+Arquivo: WMM2025.COF
+Modelo: World Magnetic Model 2025 (WMM2025), época 2025.0, válido de
+        01/01/2025 a 31/12/2029. Publicado pela NOAA NCEI e pelo British
+        Geological Survey em 13/11/2024.
+Licença: domínio público (obra do governo dos EUA).
+Página oficial: https://www.ncei.noaa.gov/products/world-magnetic-model
+
+Obtenção (nov/2026): o servidor da NOAA não estava acessível no ambiente de
+desenvolvimento; o arquivo foi copiado sem modificação do pacote pygeomag
+1.1.0 (PyPI, licença MIT), que redistribui o WMM.COF oficial
+(pygeomag/wmm/WMM_2025.COF).
+SHA-256: dfa8597825af4e0b87ff4198a5b4fb661b3c49f4cd090cd0164e0259b075582f
+
+Conferência feita na obtenção:
+  - 89 dos 90 coeficientes (grau 1 a 12) coincidem, após arredondar para
+    0,1 nT, com o modelo de alta resolução WMMHR2025 da NOAA (a única
+    diferença é de 0,1 nT em um termo de grau 12, efeito de arredondamento).
+  - A declinação calculada por algorithms/ocad/wmm.py foi comparada com a
+    implementação independente do pygeomag e com o IGRF-14 (ver os testes
+    em tests/test_wmm.py).
+
+Uso: algorithms/ocad/wmm.py lê este arquivo e calcula a declinação magnética
+sem internet, no momento em que a folha é criada (Definir Local).
+
+Atualização (quando sair o WMM2030, previsto para dez/2029): baixar o
+WMM.COF oficial, salvar aqui como WMM2030.COF, apontar ARQUIVO_PADRAO em
+wmm.py para ele, atualizar este arquivo e os valores de referência dos testes.
