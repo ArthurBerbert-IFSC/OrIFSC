@@ -43,6 +43,20 @@ util quando o login no portal e via GitHub SSO e nao existe senha OSGeo tradicio
 > A versao publicada e a **da tag** — entao a tag `0.1.6` publica como 0.1.6.
 > Mantenha o `version=` do metadata.txt igual a tag para evitar confusao.
 
+## Aprovacao no plugins.qgis.org (o "X vermelho")
+
+Toda versao enviada passa por: upload -> scan de seguranca -> **aprovacao**. Ate ser aprovada,
+ela aparece na sua pagina logada com um **X vermelho** na coluna de aprovacao (icone de tomada),
+0 downloads, e o publico continua recebendo a versao anterior. **Isso nao e erro.**
+
+- O workflow ja pede publicacao automatica (`auto_approve_after_scan=true`, enviado pelo
+  qgis-plugin-ci >= 2.11.0). O site so atende se a sua conta tiver a permissao `can_approve`
+  ("trusted user"). Sem ela, um voluntario aprova manualmente — em dias uteis; o que for enviado
+  de sexta a domingo costuma ser aprovado na segunda.
+- **Nao** suba uma versao nova (ex.: 0.2.1) para "destravar": ela entra na mesma fila.
+- Para ganhar a publicacao imediata, peca a permissao `can_approve` a equipe do plugins.qgis.org
+  (lista QGIS Developers). Documentacao: https://plugins.qgis.org/docs/approval
+
 ## Observacoes
 
 - Apenas **dar `git push`** (sem tag) **nao** publica nada no QGIS — so atualiza o GitHub.
