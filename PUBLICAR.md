@@ -61,3 +61,14 @@ util quando o login no portal e via GitHub SSO e nao existe senha OSGeo tradicio
   ```
 - Para desenvolver com hot-reload, rode [dev-setup.ps1](dev-setup.ps1) com o QGIS fechado:
   ele aponta a pasta de plugins do QGIS para a pasta `OrIFSC/` deste repo (junction, sem admin).
+
+## Se a publicacao falhar
+
+- **403 com "Due to a secret rotation ... this token is no longer valid"**: o
+  plugins.qgis.org invalidou os tokens. Gere um token novo na pagina do plugin
+  (plugins.qgis.org/plugins/OrIFSC/ > Tokens), atualize o secret `QGIS_TOKEN` no
+  GitHub (Settings > Secrets and variables > Actions) e rode de novo a Action
+  (Actions > execucao com erro > Re-run jobs). Nao precisa criar outra tag.
+- **422 "already_exists" ao anexar o zip** (ao repetir uma Action que ja chegou a
+  anexar o `OrIFSC.X.Y.Z.zip` ao Release): apague o anexo em Releases > a versao >
+  Edit > Assets, clique em Update release e rode a Action de novo.
