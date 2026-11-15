@@ -1,11 +1,11 @@
 """Definir Local e Criar Folha.
 
-Diálogo que pede a coordenada (Google Maps), escala e folha; configura o
-projeto em UTM, calcula a declinação magnética (WMM offline, ou valor manual),
-guarda a folha para os passos seguintes e já cria a camada 'folha' girada para
-o norte magnético — assim ela fica em pé no papel do OCAD/OOM. O campo de
-coordenada vem pré-preenchido com o centro da vista atual (o satélite do
-Passo 1 já está carregado) e continua editável.
+Diálogo que pede o tipo de mapa, a coordenada (Google Maps), escala e folha;
+configura o projeto em UTM, calcula a declinação magnética (WMM offline, ou
+valor manual), guarda a folha para os passos seguintes e já cria a camada
+'folha' girada para o norte magnético — assim ela fica em pé no papel do
+OCAD/OOM. O campo de coordenada vem pré-preenchido com o centro da vista atual
+e continua editável. Todos os textos passam por ``tr()`` (pt/en/tr).
 """
 import datetime
 from typing import Any, Optional, Tuple
@@ -23,35 +23,51 @@ from qgis.PyQt.QtWidgets import (
 from ..algorithms.ocad.folha import PAPEIS
 from ..algorithms.ocad.geo import declinacao_wmm
 from ..algorithms.ocad.tipos_mapa import (
-    PERSONALIZADO, TIPOS_MAPA, resumo, tem_predefinicao, tipo_por_id,
+    PERSONALIZADO, ROTULO_NORMA, TIPOS_MAPA, tem_predefinicao, tipo_por_id,
 )
-from .painel import montar_com_painel, INSTRUCOES
+from ..i18n import N_, formatar_decimal, formatar_graus, formatar_inteiro, tr
+from .comum import ORIGEM_MANUAL, PREFIXO_ORIGEM_WMM, rotulo_origem
+from .configuracoes import ORIENTACOES
+from .painel import montar_com_painel, instrucoes
 
-ESCALAS = [
-    ('1:2.000', 2000),
-    ('1:3.000', 3000),
-    ('1:4.000', 4000),
-    ('1:5.000', 5000),
-    ('1:7.500', 7500),
-    ('1:10.000', 10000),
-    ('1:15.000', 15000),
-    ('Personalizada...', -1),
-]
+# Denominadores das escalas pré-definidas; -1 = personalizada. O rótulo é
+# montado na tela, com o separador de milhar do idioma (1:10.000 / 1:10,000).
+ESCALAS = [2000, 3000, 4000, 5000, 7500, 10000, 15000, -1]
+ROTULO_PERSONALIZADA = N_('Personalizada...')
 
 FOLHAS = list(PAPEIS)
 
 
-def _graus(valor: float) -> str:
-    """Ângulo para exibição em pt-BR: '-20,08°'."""
-    return f'{valor:.2f}°'.replace('.', ',')
+
+def rotulo_escala(valor: int) -> str:
+    """Rótulo do combo de escalas no idioma ativo (1:4.000 / 1:4,000)."""
+    if valor == -1:
+        return tr(ROTULO_PERSONALIZADA)
+    return '1:' + formatar_inteiro(valor)
 
 
 def mensagem_orientacao(info: dict) -> str:
     """Texto da barra de mensagens depois de criar/ajustar a folha."""
-    return (f'Folha girada {_graus(info["grivacao"])} para o norte magnético '
-            f'(declinação {_graus(info["declinacao"])}, {info["origem"]}; '
-            f'convergência {_graus(info["convergencia"])}). No OCAD ela fica '
-            'em pé.')
+    return tr('Folha girada {grivacao} para o norte magnético (declinação '
+              '{declinacao}, {origem}; convergência {convergencia}). No OCAD '
+              'ela fica em pé.',
+              grivacao=formatar_graus(info['grivacao']),
+              declinacao=formatar_graus(info['declinacao']),
+              origem=rotulo_origem(info['origem']),
+              convergencia=formatar_graus(info['convergencia']))
+
+
+def resumo_tipo(tipo) -> str:
+    """Linha curta abaixo do tipo de mapa: o que ele vai usar."""
+    if not tem_predefinicao(tipo):
+        return tr('Norma sugerida pela escala (até 1:5.000 → ISSprOM) e '
+                  'equidistância das Configurações.')
+    return tr('{norma} · 1:{escala} · equidistância {equidistancia} m · '
+              '{papel}',
+              norma=ROTULO_NORMA[tipo.norma],
+              escala=formatar_inteiro(tipo.escala),
+              equidistancia=formatar_decimal(tipo.equidistancia, 1),
+              papel=tipo.papel)
 
 
 def ler_coordenada(texto: str) -> Optional[Tuple[float, float]]:
@@ -82,7 +98,7 @@ class DialogDefinirLocal(QDialog):
         """
         super().__init__(parent)
         self.iface = iface
-        self.setWindowTitle('OrIFSC — Definir Local e Criar Folha')
+        self.setWindowTitle(tr('OrIFSC — Definir Local e Criar Folha'))
         self.setMinimumWidth(400)
 
         layout = QVBoxLayout()
@@ -91,58 +107,59 @@ class DialogDefinirLocal(QDialog):
 
         self.tipo_combo = QComboBox()
         for tipo in TIPOS_MAPA:
-            self.tipo_combo.addItem(tipo.rotulo, tipo.id)
-        form.addRow('Tipo de mapa:', self.tipo_combo)
+            self.tipo_combo.addItem(tr(tipo.rotulo), tipo.id)
+        form.addRow(tr('Tipo de mapa:'), self.tipo_combo)
         self.tipo_resumo = QLabel()
         self.tipo_resumo.setWordWrap(True)
         self.tipo_resumo.setStyleSheet('color: #555; font-style: italic;')
         form.addRow('', self.tipo_resumo)
 
         self.coord_input = QLineEdit()
-        self.coord_input.setPlaceholderText('Ex: -27.5926, -48.5431')
-        form.addRow('Coordenada (Google Maps):', self.coord_input)
+        self.coord_input.setPlaceholderText(tr('Ex: -27.5926, -48.5431'))
+        form.addRow(tr('Coordenada (Google Maps):'), self.coord_input)
 
         self.escala_combo = QComboBox()
-        for label, _ in ESCALAS:
-            self.escala_combo.addItem(label)
+        for val in ESCALAS:
+            self.escala_combo.addItem(rotulo_escala(val))
         self.escala_combo.currentIndexChanged.connect(self._on_escala_changed)
-        form.addRow('Escala:', self.escala_combo)
+        form.addRow(tr('Escala:'), self.escala_combo)
 
         self.escala_custom = QSpinBox()
         self.escala_custom.setRange(500, 500000)
         self.escala_custom.setValue(4000)
-        self.escala_custom.setSuffix('  (denominador)')
+        self.escala_custom.setSuffix(tr('  (denominador)'))
         self.escala_custom.setVisible(False)
-        form.addRow('Valor personalizado:', self.escala_custom)
+        form.addRow(tr('Valor personalizado:'), self.escala_custom)
 
         self.folha_combo = QComboBox()
         for nome, _, _ in FOLHAS:
             self.folha_combo.addItem(nome)
         self.folha_combo.setCurrentIndex(1)
         self.folha_combo.currentIndexChanged.connect(self._atualizar_preview)
-        form.addRow('Tamanho da Folha:', self.folha_combo)
+        form.addRow(tr('Tamanho da Folha:'), self.folha_combo)
 
         self.orientacao_combo = QComboBox()
-        self.orientacao_combo.addItems(['Paisagem', 'Retrato'])
+        for ori in ORIENTACOES:
+            self.orientacao_combo.addItem(tr(ori), ori)
         self.orientacao_combo.currentIndexChanged.connect(
             self._atualizar_preview)
-        form.addRow('Orientação:', self.orientacao_combo)
+        form.addRow(tr('Orientação:'), self.orientacao_combo)
 
         self.preview_label = QLabel()
         self.preview_label.setStyleSheet('color: #555; font-style: italic;')
-        form.addRow('Área no terreno:', self.preview_label)
+        form.addRow(tr('Área no terreno:'), self.preview_label)
 
         self.decl_label = QLabel()
         self.decl_label.setWordWrap(True)
         self.decl_label.setStyleSheet('color: #555; font-style: italic;')
-        form.addRow('Declinação magnética:', self.decl_label)
+        form.addRow(tr('Declinação magnética:'), self.decl_label)
 
-        self.decl_manual_check = QCheckBox('Informar manualmente')
+        self.decl_manual_check = QCheckBox(tr('Informar manualmente'))
         self.decl_manual_spin = QDoubleSpinBox()
         self.decl_manual_spin.setRange(-90.0, 90.0)
         self.decl_manual_spin.setDecimals(2)
         self.decl_manual_spin.setSingleStep(0.1)
-        self.decl_manual_spin.setSuffix('°  (leste +, oeste −)')
+        self.decl_manual_spin.setSuffix(tr('°  (leste +, oeste −)'))
         self.decl_manual_spin.setEnabled(False)
         self.decl_manual_check.toggled.connect(
             self.decl_manual_spin.setEnabled)
@@ -153,15 +170,15 @@ class DialogDefinirLocal(QDialog):
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                   QDialogButtonBox.StandardButton.Cancel)
         botoes.button(
-            QDialogButtonBox.StandardButton.Ok).setText('Criar Folha')
+            QDialogButtonBox.StandardButton.Ok).setText(tr('Criar Folha'))
         botoes.button(
-            QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
+            QDialogButtonBox.StandardButton.Cancel).setText(tr('Cancelar'))
         botoes.accepted.connect(self._definir)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
 
-        montar_com_painel(self, layout, 'Definir Local e Criar Folha',
-                          INSTRUCOES['definir_local'])
+        montar_com_painel(self, layout, tr('Definir Local e Criar Folha'),
+                          instrucoes('definir_local'))
 
         self._aplicar_padroes()
         self._selecionar_tipo_inicial()
@@ -177,20 +194,22 @@ class DialogDefinirLocal(QDialog):
                                         ler_orientacao_padrao)
         except Exception:
             return
-        padrao = ler_escala_padrao()
-        for i, (_, val) in enumerate(ESCALAS):
-            if val == padrao:
-                self.escala_combo.setCurrentIndex(i)
-                break
-        else:
-            self.escala_combo.setCurrentIndex(len(ESCALAS) - 1)
-            self.escala_custom.setValue(padrao)
+        self._definir_escala(ler_escala_padrao())
         nomes = [nome for nome, _, _ in FOLHAS]
         folha = ler_folha_padrao()
         if folha in nomes:
             self.folha_combo.setCurrentIndex(nomes.index(folha))
         self.orientacao_combo.setCurrentIndex(
             1 if ler_orientacao_padrao() == 'Retrato' else 0)
+
+    def _definir_escala(self, escala: int) -> None:
+        """Seleciona a escala no combo (ou em 'Personalizada')."""
+        for i, val in enumerate(ESCALAS):
+            if val == escala:
+                self.escala_combo.setCurrentIndex(i)
+                return
+        self.escala_combo.setCurrentIndex(len(ESCALAS) - 1)
+        self.escala_custom.setValue(escala)
 
     def tipo(self):
         """``TipoMapa`` selecionado."""
@@ -214,16 +233,10 @@ class DialogDefinirLocal(QDialog):
         fica como está). Os campos continuam editáveis; o tipo segue
         valendo para a norma e a equidistância dos passos seguintes."""
         tipo = self.tipo()
-        self.tipo_resumo.setText(resumo(tipo))
+        self.tipo_resumo.setText(resumo_tipo(tipo))
         if not tem_predefinicao(tipo):
             return
-        for i, (_, valor) in enumerate(ESCALAS):
-            if valor == tipo.escala:
-                self.escala_combo.setCurrentIndex(i)
-                break
-        else:
-            self.escala_combo.setCurrentIndex(len(ESCALAS) - 1)
-            self.escala_custom.setValue(tipo.escala)
+        self._definir_escala(tipo.escala)
         nomes = [nome for nome, _, _ in FOLHAS]
         self.folha_combo.setCurrentIndex(nomes.index(tipo.papel))
 
@@ -250,7 +263,7 @@ class DialogDefinirLocal(QDialog):
         Args:
             idx: Índice selecionado no combo de escalas.
         """
-        self.escala_custom.setVisible(ESCALAS[idx][1] == -1)
+        self.escala_custom.setVisible(ESCALAS[idx] == -1)
         self._atualizar_preview()
 
     def _escala_valor(self) -> int:
@@ -259,8 +272,7 @@ class DialogDefinirLocal(QDialog):
         Returns:
             int: Denominador da escala padrão ou personalizada.
         """
-        idx = self.escala_combo.currentIndex()
-        val = ESCALAS[idx][1]
+        val = ESCALAS[self.escala_combo.currentIndex()]
         return self.escala_custom.value() if val == -1 else val
 
     def _dimensoes_mm(self) -> Tuple[int, int]:
@@ -271,12 +283,12 @@ class DialogDefinirLocal(QDialog):
         return larg_mm, alt_mm
 
     def _atualizar_preview(self) -> None:
-        """Atualiza texto de área real da folha no terreno.
-        """
+        """Atualiza texto de área real da folha no terreno."""
         escala = self._escala_valor()
         larg_mm, alt_mm = self._dimensoes_mm()
         self.preview_label.setText(
-            f'{(larg_mm / 1000.0) * escala:.0f} m × {(alt_mm / 1000.0) * escala:.0f} m')
+            f'{(larg_mm / 1000.0) * escala:.0f} m × '
+            f'{(alt_mm / 1000.0) * escala:.0f} m')
 
     def _declinacao_wmm(self, lat: float, lon: float) -> Tuple[float, bool]:
         """Declinação de hoje pelo WMM offline: (graus, dentro_da_validade)."""
@@ -290,28 +302,29 @@ class DialogDefinirLocal(QDialog):
         """
         if self.decl_manual_check.isChecked():
             self.decl_label.setText(
-                'Valor manual — a folha será girada com ele.')
+                tr('Valor manual — a folha será girada com ele.'))
             return
         coord = ler_coordenada(self.coord_input.text())
         if coord is None:
-            self.decl_label.setText('Informe a coordenada para calcular.')
+            self.decl_label.setText(tr('Informe a coordenada para calcular.'))
             return
         valor, valido = self._declinacao_wmm(*coord)
         self.decl_manual_spin.setValue(round(valor, 2))
-        texto = (f'{_graus(valor)} ({"oeste" if valor < 0 else "leste"}) — '
-                 'modelo WMM, calculada sem internet.')
+        texto = tr('{valor} ({lado}) — modelo WMM, calculada sem internet.',
+                   valor=formatar_graus(valor),
+                   lado=tr('oeste') if valor < 0 else tr('leste'))
         if not valido:
-            texto += (' Atenção: o modelo embutido está vencido; confira o '
-                      'valor e atualize o plugin.')
+            texto += ' ' + tr('Atenção: o modelo embutido está vencido; '
+                              'confira o valor e atualize o plugin.')
         self.decl_label.setText(texto)
 
     def _declinacao_escolhida(self, lat: float, lon: float) -> Tuple[float, str]:
-        """(declinação em graus, origem) que vai girar a folha."""
+        """(declinação em graus, origem gravada) que vai girar a folha."""
         if self.decl_manual_check.isChecked():
-            return self.decl_manual_spin.value(), 'manual'
+            return self.decl_manual_spin.value(), ORIGEM_MANUAL
         valor, _ = self._declinacao_wmm(lat, lon)
         hoje = datetime.date.today().strftime('%d/%m/%Y')
-        return valor, f'WMM em {hoje}'
+        return valor, PREFIXO_ORIGEM_WMM + hoje
 
     def _definir(self) -> None:
         """Valida entrada, define CRS UTM e cria a camada de folha girada.
@@ -326,9 +339,9 @@ class DialogDefinirLocal(QDialog):
         if coord is None:
             self.iface.messageBar().pushMessage(
                 'OrIFSC',
-                'Informe a coordenada no formato Lat, Lon (latitude entre -90 '
-                'e 90, longitude entre -180 e 180). Exemplo: -27.5926, '
-                '-48.5431.',
+                tr('Informe a coordenada no formato Lat, Lon (latitude entre '
+                   '-90 e 90, longitude entre -180 e 180). Exemplo: -27.5926, '
+                   '-48.5431.'),
                 level=Qgis.MessageLevel.Warning,
                 duration=6)
             return
@@ -342,14 +355,14 @@ class DialogDefinirLocal(QDialog):
 
         crs_wgs = QgsCoordinateReferenceSystem.fromEpsgId(4326)
         crs_utm = QgsCoordinateReferenceSystem.fromEpsgId(epsg)
-        pt_utm = QgsCoordinateTransform(crs_wgs, crs_utm, QgsProject.instance()).transform(
-            QgsPointXY(lon, lat))
+        pt_utm = QgsCoordinateTransform(
+            crs_wgs, crs_utm, QgsProject.instance()).transform(
+                QgsPointXY(lon, lat))
 
         declinacao, origem = self._declinacao_escolhida(lat, lon)
 
         QgsProject.instance().setCrs(crs_utm)
         self.iface.mapCanvas().setDestinationCrs(crs_utm)
-        from .criar_folha import aplicar_folha
         from .comum import salvar_tipo_mapa
         salvar_tipo_mapa(self.tipo().id)
         try:
@@ -357,6 +370,7 @@ class DialogDefinirLocal(QDialog):
             salvar_tipo_mapa_ultimo(self.tipo().id)
         except Exception:  # nosec B110 - lembrar o tipo é conveniência
             pass
+        from .criar_folha import aplicar_folha
         info = aplicar_folha(self.iface, epsg, pt_utm.x(), pt_utm.y(),
                              larg_mm, alt_mm, escala, declinacao, origem,
                              parent=self)

@@ -73,7 +73,8 @@ def test_exportacao_em_dia_e_desatualizada(etapas):
              exportacao_curvas_geracao=4, exportacao_pasta='C:/mapas/parque')
     lista = etapas.calcular_etapas(etapas.Situacao(**s))
     assert lista[-1].estado == etapas.FEITO
-    assert 'C:/mapas/parque' in lista[-1].detalhe
+    assert lista[-1].detalhe == 'Projeto exportado em {pasta}.'
+    assert lista[-1].valores == {'pasta': 'C:/mapas/parque'}
     # Folha ajustada depois da exportação.
     assert _estados(etapas, **dict(s, folha_revisao=3))['exportar'] == \
         etapas.AVISO

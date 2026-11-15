@@ -9,23 +9,29 @@ grivação salva) continuam com o retângulo alinhado à quadrícula UTM.
 Folha: calcula a orientação (declinação, convergência, grivação) no centro da
 folha, grava o estado no projeto e cria ou atualiza a camada — sem duplicar a
 camada a cada ajuste.
+
+O nome da camada segue o idioma do plugin (folha/sheet/pafta); ela é
+reconhecida pela propriedade de papel (``comum.camada_folha``), não pelo nome.
 """
 import datetime
 from typing import Any, Dict, Optional
 
 from qgis.core import (
     QgsVectorLayer, QgsFeature, QgsGeometry, QgsPointXY, QgsRectangle,
-    QgsProject, QgsSymbol, QgsSingleSymbolRenderer, Qgis,
+    QgsProject, QgsSymbol, QgsSingleSymbolRenderer,
 )
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QColor
 
+from ..i18n import tr
 from .comum import (ler_folha, ler_folha_girada, ler_declinacao,
                     salvar_folha, salvar_escala, salvar_declinacao,
-                    avisar_projeto_nao_configurado)
+                    avisar_projeto_nao_configurado, camada_folha,
+                    marcar_papel, PAPEL_FOLHA, ORIGEM_MANUAL,
+                    PREFIXO_ORIGEM_WMM)
 
-NOME_CAMADA = 'folha'
-PROPRIEDADE_CAMADA = 'OrIFSC/camada'
+__all__ = ['aplicar_folha', 'calcular_orientacao', 'camada_folha',
+           'criar_folha']
 
 
 def calcular_orientacao(epsg: int, ref_e: float, ref_n: float,
@@ -48,16 +54,17 @@ def calcular_orientacao(epsg: int, ref_e: float, ref_n: float,
     lat, lon = centro_latlon(epsg, ref_e, ref_n)
     if declinacao is None:
         salva = ler_declinacao()
-        if salva is not None and salva[1] == 'manual':
+        if salva is not None and salva[1] == ORIGEM_MANUAL:
             declinacao, origem = salva
         else:
             declinacao, _ = declinacao_wmm(lat, lon, datetime.date.today())
-            origem = 'WMM em ' + datetime.date.today().strftime('%d/%m/%Y')
+            origem = (PREFIXO_ORIGEM_WMM
+                      + datetime.date.today().strftime('%d/%m/%Y'))
     zona, _ = zona_utm_de_epsg(epsg)
     convergencia = convergencia_utm(lat, lon, meridiano_central(zona))
     return {
         'declinacao': declinacao,
-        'origem': origem or 'manual',
+        'origem': origem or ORIGEM_MANUAL,
         'convergencia': convergencia,
         'grivacao': grivacao(declinacao, convergencia),
         'lat': lat,
@@ -85,24 +92,6 @@ def aplicar_folha(iface: Any, epsg: int, ref_e: float, ref_n: float,
     return orientacao
 
 
-def camada_folha() -> Optional[QgsVectorLayer]:
-    """A camada 'folha' do OrIFSC no projeto, ou None.
-
-    Procura primeiro a camada marcada pelo plugin; em projetos da 0.1.x (sem
-    marca), a primeira camada de polígono chamada 'folha'.
-    """
-    candidatas = [c for c in QgsProject.instance().mapLayers().values()
-                  if isinstance(c, QgsVectorLayer)
-                  and c.geometryType() == Qgis.GeometryType.Polygon]
-    for c in candidatas:
-        if c.customProperty(PROPRIEDADE_CAMADA) == NOME_CAMADA:
-            return c
-    for c in candidatas:
-        if c.name() == NOME_CAMADA:
-            return c
-    return None
-
-
 def _geometria_salva() -> Optional[QgsGeometry]:
     """Geometria da folha a partir do estado do projeto, ou None."""
     estado = ler_folha()
@@ -128,7 +117,7 @@ def _atualizar_existente(camada: QgsVectorLayer, epsg: int,
     if not camada.dataProvider().changeGeometryValues(
             {feicao.id(): geometria}):
         return False
-    camada.setCustomProperty(PROPRIEDADE_CAMADA, NOME_CAMADA)
+    marcar_papel(camada, PAPEL_FOLHA)
     camada.updateExtents()
     camada.triggerRepaint()
     return True
@@ -136,12 +125,12 @@ def _atualizar_existente(camada: QgsVectorLayer, epsg: int,
 
 def _nova_camada(epsg: int, geometria: QgsGeometry) -> QgsVectorLayer:
     """Camada de memória 'folha' com borda magenta, marcada pelo plugin."""
-    folha = QgsVectorLayer(f'Polygon?crs=EPSG:{epsg}', NOME_CAMADA, 'memory')
+    folha = QgsVectorLayer(f'Polygon?crs=EPSG:{epsg}', tr('folha'), 'memory')
     feat = QgsFeature()
     feat.setGeometry(geometria)
     folha.dataProvider().addFeatures([feat])
     folha.updateExtents()
-    folha.setCustomProperty(PROPRIEDADE_CAMADA, NOME_CAMADA)
+    marcar_papel(folha, PAPEL_FOLHA)
 
     simbolo = QgsSymbol.defaultSymbol(folha.geometryType())
     simbolo.symbolLayer(0).setStrokeColor(QColor(255, 0, 255))

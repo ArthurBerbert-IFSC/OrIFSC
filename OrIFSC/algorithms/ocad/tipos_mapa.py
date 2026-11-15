@@ -7,6 +7,13 @@ nov/2026, valores validados com a FLORA).
 """
 from typing import NamedTuple, Optional
 
+
+def N_(texto: str) -> str:
+    """Marca o rótulo para tradução (extraído por tools/i18n_atualizar.py);
+    a tela mostra ``tr(rotulo)``. Local para o módulo seguir sem imports."""
+    return texto
+
+
 # Mesmos valores de simbologia.NORMA_ISOM / NORMA_ISSPROM (repetidos aqui para
 # manter este módulo sem dependências).
 NORMA_ISOM = 'ISOM'
@@ -26,10 +33,10 @@ class TipoMapa(NamedTuple):
 
 
 TIPOS_MAPA = (
-    TipoMapa('sprint', 'Sprint / urbano', NORMA_ISSPROM, 4000, 2.5, 'A4'),
-    TipoMapa('floresta', 'Floresta / rural', NORMA_ISOM, 10000, 5.0, 'A4'),
-    TipoMapa('escolar', 'Escolar / parque', NORMA_ISSPROM, 2000, 2.0, 'A4'),
-    TipoMapa(PERSONALIZADO, 'Personalizado', None, None, None, None),
+    TipoMapa('sprint', N_('Sprint / urbano'), NORMA_ISSPROM, 4000, 2.5, 'A4'),
+    TipoMapa('floresta', N_('Floresta / rural'), NORMA_ISOM, 10000, 5.0, 'A4'),
+    TipoMapa('escolar', N_('Escolar / parque'), NORMA_ISSPROM, 2000, 2.0, 'A4'),
+    TipoMapa(PERSONALIZADO, N_('Personalizado'), None, None, None, None),
 )
 
 ROTULO_NORMA = {
@@ -50,13 +57,3 @@ def tem_predefinicao(tipo: Optional[TipoMapa]) -> bool:
     """True para os tipos que fixam norma/escala/equidistância/papel."""
     return tipo is not None and tipo.id != PERSONALIZADO
 
-
-def resumo(tipo: TipoMapa) -> str:
-    """Linha curta para o diálogo: o que o tipo vai usar."""
-    if not tem_predefinicao(tipo):
-        return ('Norma sugerida pela escala (até 1:5.000 → ISSprOM) e '
-                'equidistância das Configurações.')
-    equi = f'{tipo.equidistancia:g}'.replace('.', ',')
-    escala = f'{tipo.escala:,}'.replace(',', '.')
-    return (f'{ROTULO_NORMA[tipo.norma]} · 1:{escala} · equidistância '
-            f'{equi} m · {tipo.papel}')

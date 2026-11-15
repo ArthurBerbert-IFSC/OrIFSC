@@ -12,6 +12,8 @@ from typing import Any, Optional
 from qgis.core import QgsRasterLayer, QgsProject, QgsMessageLog, Qgis
 from qgis.PyQt.QtWidgets import QMessageBox
 
+from ..i18n import tr
+
 URL_GOOGLE = ('type=xyz&url=https://mt1.google.com/vt/'
               'lyrs%3Ds%26x%3D%7Bx%7D%26y%3D%7By%7D%26z%3D%7Bz%7D&zmax=20&zmin=0')
 
@@ -28,21 +30,24 @@ def adicionar_xyz(
     """
     layer = QgsRasterLayer(url, nome, 'wms')
     if not layer.isValid():
-        erro = layer.error().message() if layer.error() else 'sem detalhes'
-        QgsMessageLog.logMessage(f'Erro ao carregar "{nome}": {erro}',
-                                 'OrIFSC', Qgis.MessageLevel.Critical)
+        erro = (layer.error().message() if layer.error()
+                else tr('sem detalhes'))
+        QgsMessageLog.logMessage(
+            tr('Erro ao carregar "{nome}": {erro}', nome=nome, erro=erro),
+            'OrIFSC', Qgis.MessageLevel.Critical)
         if hasattr(iface, 'messageBar'):
             iface.messageBar().pushMessage(
                 'OrIFSC',
-                f'Não foi possível carregar {nome}. Verifique sua conexão '
-                'e tente novamente.',
+                tr('Não foi possível carregar {nome}. Verifique sua conexão '
+                   'e tente novamente.', nome=nome),
                 level=Qgis.MessageLevel.Critical,
                 duration=8)
         else:
-            QMessageBox.warning(parent, nome,
-                                f'Não foi possível carregar "{nome}".\n\n'
-                                f'Erro: {erro}\n\n'
-                                'Veja mais em: Exibir → Painéis → Mensagens de Log → aba OrIFSC')
+            QMessageBox.warning(
+                parent, nome,
+                tr('Não foi possível carregar "{nome}".\n\nErro: {erro}\n\n'
+                   'Veja mais em: Exibir → Painéis → Mensagens de Log → aba '
+                   'OrIFSC', nome=nome, erro=erro))
         return None
 
     proj = QgsProject.instance()

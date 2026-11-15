@@ -12,7 +12,9 @@ from qgis.core import (
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QColor
 
-from .comum import projeto_configurado, avisar_projeto_nao_configurado
+from ..i18n import tr
+from .comum import (projeto_configurado, avisar_projeto_nao_configurado,
+                    marcar_papel, PAPEL_LIMITE)
 
 
 def criar_limite(iface: Any, parent: Any = None) -> Optional[QgsVectorLayer]:
@@ -34,7 +36,8 @@ def criar_limite(iface: Any, parent: Any = None) -> Optional[QgsVectorLayer]:
         return None
 
     authid = QgsProject.instance().crs().authid()
-    limite = QgsVectorLayer(f'Polygon?crs={authid}', 'limite', 'memory')
+    limite = QgsVectorLayer(f'Polygon?crs={authid}', tr('limite'), 'memory')
+    marcar_papel(limite, PAPEL_LIMITE)
 
     simbolo = QgsSymbol.defaultSymbol(limite.geometryType())
     camada = simbolo.symbolLayer(0)

@@ -10,6 +10,12 @@ Tipos de mapa: Sprint, Floresta, Escolar e Personalizado já preenchem norma, es
 Assistente OrIFSC: painel lateral que guia as etapas, sem bloquear nada, e avisa o que ficou desatualizado.
 Linhas de norte magnético: exportadas no símbolo e no espaçamento da norma.
 
+🌐 Idiomas / Languages / Diller
+O plugin está disponível em Português, English e Türkçe. Por padrão segue o idioma do QGIS (outros idiomas caem no inglês); para escolher manualmente, use o menu OrIFSC → Idioma / Language ou OrIFSC → Configurações.
+The plugin follows the QGIS language by default; pick another one under OrIFSC → Language.
+Eklenti varsayılan olarak QGIS dilini kullanır; başka bir dil seçmek için OrIFSC → Dil / Language menüsünü kullanın.
+Quer ajudar a traduzir ou revisar? Os textos ficam em OrIFSC/i18n/*.json (texto em português = chave); rode python tools/i18n_atualizar.py depois de mudar textos no código.
+
 📥 Instalação
 O OrIFSC já está disponível no repositório oficial do QGIS:
 Abra o QGIS (versão 3.40 ou superior; compatível com o QGIS 4).

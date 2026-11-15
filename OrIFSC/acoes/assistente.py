@@ -18,6 +18,7 @@ from qgis.gui import QgsDockWidget
 from qgis.PyQt.QtCore import QTimer
 from qgis.PyQt.QtWidgets import QTextBrowser
 
+from ..i18n import formatar_graus, formatar_inteiro, maiusculas, tr
 from .etapas import (AVISO, FEITO, OPCIONAL, PROXIMO, Etapa, Situacao,
                      calcular_etapas)
 from .painel import C, _dica, _esp, painel_html
@@ -27,16 +28,12 @@ COR_AVISO = '#c77700'
 COR_PENDENTE = '#c9c3b6'
 
 
-def _graus(valor: float) -> str:
-    return f'{valor:.2f}°'.replace('.', ',')
-
-
 def situacao_do_projeto() -> Situacao:
     """Lê do projeto aberto tudo o que o assistente precisa."""
     from ..algorithms.ocad.folha import identificar_papel
-    from .comum import (camada_curvas, ler_folha, ler_folha_girada,
+    from .comum import (PAPEL_LIMITE, PROP_PAPEL, camada_curvas,
+                        camada_folha, ler_folha, ler_folha_girada,
                         ler_folha_revisao, ler_marcas, ler_tipo_mapa)
-    from .criar_folha import camada_folha
 
     girada = ler_folha_girada()
     resumo = ''
@@ -44,21 +41,26 @@ def situacao_do_projeto() -> Situacao:
         partes = []
         tipo = ler_tipo_mapa()
         if tipo is not None:
-            partes.append(tipo.rotulo)
-        partes.append('1:' + f'{girada["escala"]:,}'.replace(',', '.'))
+            partes.append(tr(tipo.rotulo))
+        partes.append('1:' + formatar_inteiro(girada['escala']))
         papel = identificar_papel(girada['larg_mm'], girada['alt_mm'])
         if papel:
-            partes.append(f'{papel[0]} {"retrato" if papel[1] else "paisagem"}')
-        partes.append(f'folha girada {_graus(girada["grivacao"])}')
+            partes.append(tr('{papel} retrato', papel=papel[0]) if papel[1]
+                          else tr('{papel} paisagem', papel=papel[0]))
+        partes.append(tr('folha girada {graus}',
+                         graus=formatar_graus(girada['grivacao'])))
         resumo = ' · '.join(partes)
 
     camadas = list(QgsProject.instance().mapLayers().values())
     folha = camada_folha()
+    # Limite pela propriedade de papel (o nome muda com o idioma); camadas
+    # sem a propriedade (projetos antigos, desenhadas à mão) pelo nome.
     tem_limite = any(
         isinstance(c, QgsVectorLayer)
         and c.geometryType() == Qgis.GeometryType.Polygon
         and (folha is None or c.id() != folha.id())
-        and 'limite' in c.name().lower()
+        and (c.customProperty(PROP_PAPEL) == PAPEL_LIMITE
+             or 'limite' in c.name().lower())
         for c in camadas)
     marcas = ler_marcas()
     return Situacao(
@@ -96,16 +98,17 @@ def html_etapas(etapas: List[Etapa]) -> str:
     linhas = ''
     for numero, etapa in enumerate(etapas, 1):
         titulo = (f'<span style="color:{C["texto"]}; font-size:13px;">'
-                  f'<b>{html.escape(etapa.titulo)}</b></span>')
+                  f'<b>{html.escape(tr(etapa.titulo))}</b></span>')
         if etapa.estado == OPCIONAL:
             titulo += (f'&nbsp; <span style="color:{C["texto2"]}; '
-                       'font-size:10px;">OPCIONAL</span>')
+                       f'font-size:10px;">{maiusculas(tr("opcional"))}</span>')
         cor_detalhe = COR_AVISO if etapa.estado == AVISO else C['texto2']
+        texto_detalhe = tr(etapa.detalhe, **etapa.valores)
         detalhe = (f'<span style="color:{cor_detalhe}; font-size:12px;">'
-                   f'{html.escape(etapa.detalhe)}</span>')
+                   f'{html.escape(texto_detalhe)}</span>')
         links = ' &nbsp;·&nbsp; '.join(
             f'<a href="orifsc:{acao}" style="color:{C["acento"]};">'
-            f'{html.escape(rotulo)}</a>'
+            f'{html.escape(tr(rotulo))}</a>'
             for rotulo, acao in etapa.acoes)
         linhas += (
             '<tr>'
@@ -117,9 +120,9 @@ def html_etapas(etapas: List[Etapa]) -> str:
     conteudo = (
         f'<table cellspacing="0" cellpadding="0" width="100%">{linhas}</table>'
         + _esp()
-        + _dica('O assistente só sugere a ordem: nada fica bloqueado, e '
-                'tudo continua no menu <b>OrIFSC</b>.'))
-    return painel_html('Assistente', conteudo)
+        + _dica(tr('O assistente só sugere a ordem: nada fica bloqueado, e '
+                   'tudo continua no menu <b>OrIFSC</b>.')))
+    return painel_html(tr('Assistente'), conteudo)
 
 
 class PainelAssistente(QgsDockWidget):
@@ -127,7 +130,7 @@ class PainelAssistente(QgsDockWidget):
 
     def __init__(self, acoes: Dict[str, Callable[[], Any]],
                  parent: Any = None) -> None:
-        super().__init__('Assistente OrIFSC', parent)
+        super().__init__(tr('Assistente OrIFSC'), parent)
         self.setObjectName('OrIFSCAssistente')
         self.acoes = acoes
 

@@ -4,6 +4,8 @@ import os
 from qgis.PyQt.QtGui import QIcon
 from qgis.core import QgsProcessingProvider
 
+from .i18n import tr
+
 
 class OrIFSCProvider(QgsProcessingProvider):
     """Registra os algoritmos Processing do OrIFSC."""
@@ -48,7 +50,7 @@ class OrIFSCProvider(QgsProcessingProvider):
         Returns:
             str: Nome descritivo do plugin.
         """
-        return 'OrIFSC — Orientação IFSC'
+        return tr('OrIFSC — Orientação IFSC')
 
     def icon(self) -> QIcon:
         """Ícone do provider com fallback para o ícone padrão do QGIS.

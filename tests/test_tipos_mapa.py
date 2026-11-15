@@ -42,11 +42,3 @@ def test_equidistancias_cabem_no_parametro_das_curvas(tipos_mapa):
         if tipos_mapa.tem_predefinicao(t):
             assert 0.5 <= t.equidistancia <= 100.0
 
-
-def test_resumo(tipos_mapa):
-    assert tipos_mapa.resumo(tipos_mapa.tipo_por_id('sprint')) == \
-        'ISSprOM 2019-2 · 1:4.000 · equidistância 2,5 m · A4'
-    assert tipos_mapa.resumo(tipos_mapa.tipo_por_id('floresta')) == \
-        'ISOM 2017-2 · 1:10.000 · equidistância 5 m · A4'
-    assert 'Configurações' in tipos_mapa.resumo(
-        tipos_mapa.tipo_por_id('personalizado'))

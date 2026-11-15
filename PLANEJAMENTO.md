@@ -19,6 +19,7 @@ concluídos e registre aqui qualquer mudança de decisão.
 | 9 | Tipo "Escolar / Parque" | **Sim**: ISSprOM, 1:2.000, equidistância 2 m, A4. |
 | 10 | Quando o assistente aparece | **Abre sozinho na primeira vez**; depois o QGIS lembra se a pessoa fechou; botão na barra reabre. |
 | 11 | Como saem as linhas de norte | **Linhas separadas, pretas** (símbolo de linha de norte da norma), uma por objeto. |
+| 12 | Tradução (pt/en/tr, feita em outra sessão na 0.1.19) | Juntada nesta versão; todos os textos novos da 0.2.0 traduzidos para inglês e turco. |
 
 Decisões técnicas (tomadas pelo Claude, sem objeção):
 
@@ -107,3 +108,5 @@ Para cada um dos dois programas, com um projeto em Florianópolis (declinação 
     do papel), a cada 30 mm no sprint/escolar e 300 m no terreno na floresta; dá para
     selecionar e cortar uma linha isolada.
 11. Rodar no QGIS 3.40 LTR e no QGIS 4 (os testes daqui usaram o QGIS 3.34 sem tela).
+12. Idiomas: em OrIFSC → Idioma / Language, trocar para Türkçe e English e repetir o fluxo
+    pelo assistente; pedir a alguém da comunidade turca para revisar os textos novos.

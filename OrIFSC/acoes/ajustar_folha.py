@@ -30,9 +30,12 @@ from ..algorithms.ocad.folha import (
 from ..algorithms.ocad.geo import cantos_folha
 from .comum import (camadas_poligono, ler_escala, ler_folha,
                     ler_folha_girada, tem_camada_curvas)
-from .criar_folha import aplicar_folha, calcular_orientacao, camada_folha
-from .definir_local import ESCALAS, _graus, mensagem_orientacao
-from .painel import montar_com_painel, INSTRUCOES
+from ..i18n import formatar_graus, formatar_inteiro, tr
+from .comum import (PAPEL_LIMITE, PROP_PAPEL, camada_folha, rotulo_origem)
+from .configuracoes import ORIENTACOES
+from .criar_folha import aplicar_folha, calcular_orientacao
+from .definir_local import ESCALAS, mensagem_orientacao, rotulo_escala
+from .painel import montar_com_painel, instrucoes
 
 COR_PREVIA = QColor(241, 89, 42)   # laranja-picota do painel
 
@@ -48,8 +51,8 @@ def _banda(canvas: Any) -> QgsRubberBand:
 
 
 def _milhar(valor: int) -> str:
-    """4000 → '4.000' (separador de milhar pt-BR)."""
-    return f'{int(valor):,}'.replace(',', '.')
+    """4000 → '4.000' / '4,000' (separador de milhar do idioma)."""
+    return formatar_inteiro(valor)
 
 
 def _geometria(cantos) -> QgsGeometry:
@@ -105,7 +108,7 @@ class DialogAjustarFolha(QDialog):
         super().__init__(parent)
         self.iface = iface
         self.canvas = iface.mapCanvas()
-        self.setWindowTitle('OrIFSC — Ajustar Folha')
+        self.setWindowTitle(tr('OrIFSC — Ajustar Folha'))
         self.setMinimumWidth(420)
 
         estado = self._estado_atual()
@@ -124,61 +127,62 @@ class DialogAjustarFolha(QDialog):
         layout.addLayout(form)
 
         self.escala_combo = QComboBox()
-        for rotulo, _ in ESCALAS:
-            self.escala_combo.addItem(rotulo)
+        for valor in ESCALAS:
+            self.escala_combo.addItem(rotulo_escala(valor))
         self.escala_custom = QSpinBox()
         self.escala_custom.setRange(500, 500000)
-        self.escala_custom.setSuffix('  (denominador)')
-        form.addRow('Escala:', self.escala_combo)
-        form.addRow('Valor personalizado:', self.escala_custom)
+        self.escala_custom.setSuffix(tr('  (denominador)'))
+        form.addRow(tr('Escala:'), self.escala_combo)
+        form.addRow(tr('Valor personalizado:'), self.escala_custom)
 
         self.papel_combo = QComboBox()
         for nome, _, _ in PAPEIS:
             self.papel_combo.addItem(nome)
-        form.addRow('Tamanho da Folha:', self.papel_combo)
+        form.addRow(tr('Tamanho da Folha:'), self.papel_combo)
 
         self.orientacao_combo = QComboBox()
-        self.orientacao_combo.addItems(['Paisagem', 'Retrato'])
-        form.addRow('Orientação:', self.orientacao_combo)
+        for ori in ORIENTACOES:
+            self.orientacao_combo.addItem(tr(ori), ori)
+        form.addRow(tr('Orientação:'), self.orientacao_combo)
 
         self.area_label = QLabel()
         self.area_label.setStyleSheet('color: #555; font-style: italic;')
-        form.addRow('Área no terreno:', self.area_label)
+        form.addRow(tr('Área no terreno:'), self.area_label)
 
         linha_centro = QHBoxLayout()
         self.centro_label = QLabel()
         self.centro_label.setStyleSheet('color: #555;')
-        botao_mover = QPushButton('Mover no mapa…')
+        botao_mover = QPushButton(tr('Mover no mapa…'))
         botao_mover.clicked.connect(self._iniciar_mover)
         linha_centro.addWidget(self.centro_label, 1)
         linha_centro.addWidget(botao_mover)
-        form.addRow('Centro da folha:', linha_centro)
+        form.addRow(tr('Centro da folha:'), linha_centro)
 
         self.orientacao_label = QLabel()
         self.orientacao_label.setWordWrap(True)
         self.orientacao_label.setStyleSheet('color: #555; font-style: italic;')
-        form.addRow('Norte magnético:', self.orientacao_label)
+        form.addRow(tr('Norte magnético:'), self.orientacao_label)
 
         linha_limite = QHBoxLayout()
         self.limite_combo = QComboBox()
-        self.botao_limite = QPushButton('Ajustar')
+        self.botao_limite = QPushButton(tr('Ajustar'))
         self.botao_limite.clicked.connect(self.ajustar_ao_limite)
         linha_limite.addWidget(self.limite_combo, 1)
         linha_limite.addWidget(self.botao_limite)
-        form.addRow('Ajustar ao limite:', linha_limite)
+        form.addRow(tr('Ajustar ao limite:'), linha_limite)
         self._preencher_limites()
 
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                   QDialogButtonBox.StandardButton.Cancel)
-        botoes.button(QDialogButtonBox.StandardButton.Ok).setText('Aplicar')
+        botoes.button(QDialogButtonBox.StandardButton.Ok).setText(tr('Aplicar'))
         botoes.button(
-            QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
+            QDialogButtonBox.StandardButton.Cancel).setText(tr('Cancelar'))
         botoes.accepted.connect(self._aplicar)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
 
-        montar_com_painel(self, layout, 'Ajustar Folha',
-                          INSTRUCOES['ajustar_folha'])
+        montar_com_painel(self, layout, tr('Ajustar Folha'),
+                          instrucoes('ajustar_folha'))
 
         self._preencher(estado)
         self.escala_combo.currentIndexChanged.connect(self._mudou_escala)
@@ -211,7 +215,7 @@ class DialogAjustarFolha(QDialog):
 
     def _preencher(self, estado: Dict[str, Any]) -> None:
         escala = int(round(estado['escala']))
-        for i, (_, valor) in enumerate(ESCALAS):
+        for i, valor in enumerate(ESCALAS):
             if valor == escala:
                 self.escala_combo.setCurrentIndex(i)
                 break
@@ -219,7 +223,7 @@ class DialogAjustarFolha(QDialog):
             self.escala_combo.setCurrentIndex(len(ESCALAS) - 1)
         self.escala_custom.setValue(escala)
         self.escala_custom.setVisible(
-            ESCALAS[self.escala_combo.currentIndex()][1] == -1)
+            ESCALAS[self.escala_combo.currentIndex()] == -1)
 
         papel = identificar_papel(estado['larg_mm'], estado['alt_mm'])
         nome, retrato = papel if papel else (
@@ -236,19 +240,25 @@ class DialogAjustarFolha(QDialog):
         self.limite_combo.clear()
         for c in camadas:
             self.limite_combo.addItem(c.name(), c.id())
-        nomes = [c.name().lower() for c in camadas]
-        for i, nome in enumerate(nomes):
-            if 'limite' in nome:
+        # A camada de limite do plugin (propriedade de papel; o nome muda com
+        # o idioma) ou, sem ela, uma camada com 'limite' no nome.
+        for i, c in enumerate(camadas):
+            if c.customProperty(PROP_PAPEL) == PAPEL_LIMITE:
                 self.limite_combo.setCurrentIndex(i)
                 break
+        else:
+            for i, c in enumerate(camadas):
+                if 'limite' in c.name().lower():
+                    self.limite_combo.setCurrentIndex(i)
+                    break
         tem = bool(camadas)
         self.limite_combo.setEnabled(tem)
         self.botao_limite.setEnabled(tem)
         if not tem:
-            self.limite_combo.addItem('(nenhuma camada de polígono)')
-            self.botao_limite.setToolTip(
+            self.limite_combo.addItem(tr('(nenhuma camada de polígono)'))
+            self.botao_limite.setToolTip(tr(
                 'Desenhe o limite em Início → Camada de Limite ou importe '
-                'um KML com o contorno da área.')
+                'um KML com o contorno da área.'))
 
     def _pontos_limite(self, camada: Any) -> List[Tuple[float, float]]:
         """Vértices do limite no CRS da folha (só as feições selecionadas,
@@ -270,7 +280,7 @@ class DialogAjustarFolha(QDialog):
         return pontos
 
     def _definir_escala(self, escala: int) -> None:
-        for i, (_, valor) in enumerate(ESCALAS):
+        for i, valor in enumerate(ESCALAS):
             if valor == escala:
                 self.escala_combo.setCurrentIndex(i)
                 return
@@ -288,7 +298,8 @@ class DialogAjustarFolha(QDialog):
         pontos = self._pontos_limite(camada) if camada is not None else []
         if not pontos:
             self.iface.messageBar().pushMessage(
-                'OrIFSC', 'A camada de limite escolhida não tem polígonos.',
+                'OrIFSC', tr('A camada de limite escolhida não tem '
+                             'polígonos.'),
                 level=Qgis.MessageLevel.Warning, duration=6)
             return
         escala = self._escala()
@@ -299,14 +310,15 @@ class DialogAjustarFolha(QDialog):
         ajuste = ajustar_ao_limite(pontos, escala, griv, papel)
         if not ajuste.cabe:
             sugerida = escala_sugerida(
-                ajuste.escala_minima, [v for _, v in ESCALAS if v > 0])
+                ajuste.escala_minima, [v for v in ESCALAS if v > 0])
             resposta = QMessageBox.question(
-                self, 'OrIFSC — Ajustar ao limite',
-                f'O limite não cabe numa folha {ajuste.papel} na escala '
-                f'1:{_milhar(escala)}, nem com o papel maior.\n\nEle caberia '
-                f'em {ajuste.papel} na escala 1:{_milhar(sugerida)}. Lembre que '
-                'a escala de competição é definida pela norma.\n\nUsar '
-                f'1:{_milhar(sugerida)}?',
+                self, tr('OrIFSC — Ajustar ao limite'),
+                tr('O limite não cabe numa folha {papel} na escala '
+                   '1:{escala}, nem com o papel maior.\n\nEle caberia em '
+                   '{papel} na escala 1:{sugerida}. Lembre que a escala de '
+                   'competição é definida pela norma.\n\nUsar 1:{sugerida}?',
+                   papel=ajuste.papel, escala=_milhar(escala),
+                   sugerida=_milhar(sugerida)),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No)
             if resposta != QMessageBox.StandardButton.Yes:
@@ -325,14 +337,15 @@ class DialogAjustarFolha(QDialog):
         escala_fmt = _milhar(self._escala())
         self.iface.messageBar().pushMessage(
             'OrIFSC',
-            f'Folha encaixada no limite: {ajuste.papel} '
-            f'{"retrato" if ajuste.retrato else "paisagem"}, escala '
-            f'1:{escala_fmt}. Confira o contorno laranja e clique em '
-            'Aplicar.',
+            tr('Folha encaixada no limite: {papel} {orientacao}, escala '
+               '1:{escala}. Confira o contorno laranja e clique em Aplicar.',
+               papel=ajuste.papel,
+               orientacao=tr('retrato') if ajuste.retrato else tr('paisagem'),
+               escala=escala_fmt),
             level=Qgis.MessageLevel.Info, duration=8)
 
     def _escala(self) -> int:
-        valor = ESCALAS[self.escala_combo.currentIndex()][1]
+        valor = ESCALAS[self.escala_combo.currentIndex()]
         return self.escala_custom.value() if valor == -1 else valor
 
     def _dimensoes(self) -> Tuple[float, float]:
@@ -346,7 +359,7 @@ class DialogAjustarFolha(QDialog):
 
     # -------------------------------------------------------------- prévia
     def _mudou_escala(self, idx: int) -> None:
-        self.escala_custom.setVisible(ESCALAS[idx][1] == -1)
+        self.escala_custom.setVisible(ESCALAS[idx] == -1)
         self._atualizar_previa()
 
     def _desenhar(self, ref_e: float, ref_n: float) -> None:
@@ -360,11 +373,14 @@ class DialogAjustarFolha(QDialog):
         larg_m, alt_m = area_terreno_m(larg_mm, alt_mm, escala)
         self.area_label.setText(f'{larg_m:.0f} m × {alt_m:.0f} m')
         self.centro_label.setText(
-            f'{ref_e:,.0f} E · {ref_n:,.0f} N'.replace(',', '.'))
+            f'{formatar_inteiro(round(ref_e))} E · '
+            f'{formatar_inteiro(round(ref_n))} N')
         o = self.orientacao
         self.orientacao_label.setText(
-            f'declinação {_graus(o["declinacao"])} ({o["origem"]}) · folha '
-            f'girada {_graus(o["grivacao"])}')
+            tr('declinação {declinacao} ({origem}) · folha girada {grivacao}',
+               declinacao=formatar_graus(o['declinacao']),
+               origem=rotulo_origem(o['origem']),
+               grivacao=formatar_graus(o['grivacao'])))
         self._desenhar(ref_e, ref_n)
 
     # ---------------------------------------------------------------- mover
@@ -377,8 +393,8 @@ class DialogAjustarFolha(QDialog):
         self.canvas.setMapTool(self._ferramenta)
         self.hide()
         self.iface.messageBar().pushMessage(
-            'OrIFSC', 'Clique no mapa para fixar o centro da folha '
-            '(botão direito ou Esc cancela).',
+            'OrIFSC', tr('Clique no mapa para fixar o centro da folha '
+                         '(botão direito ou Esc cancela).'),
             level=Qgis.MessageLevel.Info, duration=5)
 
     def _encerrar_mover(self) -> None:
@@ -425,10 +441,12 @@ class DialogAjustarFolha(QDialog):
             self.iface, self.epsg, ref_e, ref_n, larg_mm, alt_mm, escala,
             self.orientacao['declinacao'], self.orientacao['origem'],
             parent=self, enquadrar=False)
-        mensagem = 'Folha ajustada. ' + mensagem_orientacao(info)
+        mensagem = tr('Folha ajustada. {detalhe}',
+                      detalhe=mensagem_orientacao(info))
         if tem_camada_curvas():
-            mensagem += (' Se você já gerou curvas ou exportou o projeto, '
-                         'refaça essas etapas para a nova folha.')
+            mensagem += ' ' + tr('Se você já gerou curvas ou exportou o '
+                                 'projeto, refaça essas etapas para a nova '
+                                 'folha.')
         self.iface.messageBar().pushMessage(
             'OrIFSC', mensagem, level=Qgis.MessageLevel.Info, duration=10)
         self.accept()

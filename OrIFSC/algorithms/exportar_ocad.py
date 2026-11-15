@@ -19,6 +19,7 @@ from qgis.core import (
 )
 from qgis.PyQt.QtGui import QImage, QIcon
 
+from ..i18n import N_, formatar_inteiro, tr
 from ..rede import baixar_varios
 from .utils import dir_cache, ocultar_da_toolbox, podar_cache
 
@@ -30,10 +31,11 @@ TILE_URL = 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
 UA = 'Mozilla/5.0 (QGIS OrIFSC plugin)'
 
 # Índices casados com a ordem de _norma_da_opcao e com initAlgorithm.
+# Rótulos em português marcados com N_ e traduzidos ao exibir (tr).
 OPCOES_SIMBOLOGIA = [
-    'ISOM 2017-2 — floresta (1:15.000 / 1:10.000)',
-    'ISSprOM 2019-2 — sprint (1:4.000 / 1:3.000)',
-    'Nenhuma (só o símbolo de curva)',
+    N_('ISOM 2017-2 — floresta (1:15.000 / 1:10.000)'),
+    N_('ISSprOM 2019-2 — sprint (1:4.000 / 1:3.000)'),
+    N_('Nenhuma (só o símbolo de curva)'),
 ]
 
 
@@ -56,16 +58,9 @@ class ExportarOCAD(QgsProcessingAlgorithm):
     FORMATO = 'FORMATO'
     PASTA = 'PASTA'
 
-    def tr(self, s: str) -> str:
-        """Retorna texto sem tradução explícita.
-
-        Args:
-            s: Texto original.
-
-        Returns:
-            str: O mesmo texto.
-        """
-        return s
+    def tr(self, texto: str, **kwargs: Any) -> str:
+        """Traduz para o idioma ativo do plugin (ver ``OrIFSC/i18n``)."""
+        return tr(texto, **kwargs)
 
     def createInstance(self):
         """Cria nova instância do algoritmo para o Processing.
@@ -106,7 +101,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         Returns:
             str: Rótulo do algoritmo.
         """
-        return 'Gerar Projeto OCAD / OOM'
+        return self.tr('Gerar Projeto OCAD / OOM')
 
     def group(self) -> str:
         """Grupo visual do algoritmo no provider.
@@ -130,16 +125,16 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         Returns:
             str: HTML renderizável pelo painel de ajuda do Processing.
         """
-        from ..acoes.painel import painel_html, INSTRUCOES
+        from ..acoes.painel import painel_html, instrucoes as _instrucoes
         from ..acoes.comum import ler_escala
-        instrucoes = INSTRUCOES['exportar_ocad']
+        instrucoes = _instrucoes('exportar_ocad')
         escala = ler_escala()
         if escala:
-            escala_fmt = f'{escala:,}'.replace(',', '.')
             instrucoes = (
                 f'<p style="font-size:12px; color:#23262a;">'
-                f'<b>Escala do projeto:</b> 1:{escala_fmt}</p>' + instrucoes)
-        return painel_html('Gerar Projeto OCAD / OOM', instrucoes)
+                f'<b>{self.tr("Escala do projeto:")}</b> '
+                f'1:{formatar_inteiro(escala)}</p>' + instrucoes)
+        return painel_html(self.tr('Gerar Projeto OCAD / OOM'), instrucoes)
 
     def initAlgorithm(self, config=None) -> None:
         """Declara parâmetros do algoritmo de exportação.
@@ -151,47 +146,52 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         não depender de diretórios temporários para artefatos finais.
         """
         self.addParameter(QgsProcessingParameterFeatureSource(
-            self.FOLHA, 'Camada da Folha (define a área e a georreferência)',
+            self.FOLHA,
+            self.tr('Camada da Folha (define a área e a georreferência)'),
             [Qgis.ProcessingSourceType.VectorPolygon]))
         self.addParameter(QgsProcessingParameterBoolean(
-            self.EXPORTAR_SATELITE, 'Incluir satélite como mapa de fundo',
+            self.EXPORTAR_SATELITE,
+            self.tr('Incluir satélite como mapa de fundo'),
             defaultValue=True))
         self.addParameter(QgsProcessingParameterEnum(
-            self.QUALIDADE, 'Qualidade da imagem (zoom do Google)',
-            options=['Máxima (melhor zoom)', 'Alta (1 nível abaixo)',
-                     'Média (2 níveis abaixo)'], defaultValue=0))
+            self.QUALIDADE, self.tr('Qualidade da imagem (zoom do Google)'),
+            options=[self.tr('Máxima (melhor zoom)'),
+                     self.tr('Alta (1 nível abaixo)'),
+                     self.tr('Média (2 níveis abaixo)')], defaultValue=0))
         self.addParameter(QgsProcessingParameterVectorLayer(
-            self.CURVAS, 'Camada de Curvas de Nível (vira objeto no projeto)',
+            self.CURVAS,
+            self.tr('Camada de Curvas de Nível (vira objeto no projeto)'),
             [Qgis.ProcessingSourceType.VectorLine], optional=True))
         self.addParameter(QgsProcessingParameterEnum(
             self.SIMBOLOGIA,
-            'Simbologia (paleta de símbolos da norma, pronta para desenhar)',
-            options=OPCOES_SIMBOLOGIA,
+            self.tr('Simbologia (paleta de símbolos da norma, pronta para '
+                    'desenhar)'),
+            options=[self.tr(o) for o in OPCOES_SIMBOLOGIA],
             defaultValue=self._simbologia_padrao()))
         self.addParameter(QgsProcessingParameterBoolean(
             self.LINHAS_NORTE,
-            'Incluir linhas de norte magnético (símbolo 601, espaçamento da '
-            'norma; exige simbologia)',
+            self.tr('Incluir linhas de norte magnético (símbolo 601, '
+                    'espaçamento da norma; exige simbologia)'),
             defaultValue=True))
         self.addParameter(QgsProcessingParameterBoolean(
             self.DECL_AUTO,
-            'Usar a declinação magnética da folha (calculada em "Definir '
-            'Local")',
+            self.tr('Usar a declinação magnética da folha (calculada em '
+                    '"Definir Local")'),
             defaultValue=True))
         self.addParameter(QgsProcessingParameterNumber(
             self.DECL_MANUAL,
-            'Declinação magnética manual (graus, leste +; usada só com a '
-            'opção acima desmarcada)',
+            self.tr('Declinação magnética manual (graus, leste +; usada só '
+                    'com a opção acima desmarcada)'),
             type=Qgis.ProcessingNumberParameterType.Double, defaultValue=0.0,
             minValue=-90.0, maxValue=90.0))
         self.addParameter(QgsProcessingParameterEnum(
-            self.FORMATO, 'Formato(s) a gerar',
+            self.FORMATO, self.tr('Formato(s) a gerar'),
             options=['OCAD (.ocd)',
                      'OpenOrienteering Mapper (.omap)',
-                     'Ambos (.ocd e .omap)'],
+                     self.tr('Ambos (.ocd e .omap)')],
             defaultValue=0))
         self.addParameter(QgsProcessingParameterFolderDestination(
-            self.PASTA, 'Pasta de saída'))
+            self.PASTA, self.tr('Pasta de saída')))
 
     def processAlgorithm(self, parameters, context, feedback):
         """Executa exportação completa de satélite, curvas e arquivos finais.
@@ -217,17 +217,20 @@ class ExportarOCAD(QgsProcessingAlgorithm):
 
         folha = self.parameterAsSource(parameters, self.FOLHA, context)
         if folha is None:
-            feedback.pushWarning(
-                'Selecione uma camada de folha válida antes de exportar.')
-            raise QgsProcessingException('Camada da folha não informada.')
+            feedback.pushWarning(self.tr(
+                'Selecione uma camada de folha válida antes de exportar.'))
+            raise QgsProcessingException(
+                self.tr('Camada da folha não informada.'))
 
         exportar_sat = self.parameterAsBool(
             parameters, self.EXPORTAR_SATELITE, context)
         offset_zoom = self.parameterAsInt(parameters, self.QUALIDADE, context)
         curvas = self.parameterAsVectorLayer(parameters, self.CURVAS, context)
         if curvas is not None and not curvas.isValid():
-            feedback.pushWarning('A camada de curvas selecionada está inválida.')
-            raise QgsProcessingException('Camada de curvas inválida.')
+            feedback.pushWarning(
+                self.tr('A camada de curvas selecionada está inválida.'))
+            raise QgsProcessingException(
+                self.tr('Camada de curvas inválida.'))
 
         incluir_norte = self.parameterAsBool(
             parameters, self.LINHAS_NORTE, context)
@@ -244,19 +247,20 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         pasta = self.parameterAsString(parameters, self.PASTA, context)
 
         if not pasta:
-            feedback.pushWarning('Selecione uma pasta de saída antes de exportar.')
+            feedback.pushWarning(
+                self.tr('Selecione uma pasta de saída antes de exportar.'))
             raise QgsProcessingException(
-                'Selecione uma pasta de saída no seu computador.')
+                self.tr('Selecione uma pasta de saída no seu computador.'))
         pasta_abs = os.path.normcase(os.path.abspath(pasta))
         for td in (tempfile.gettempdir(), QgsProcessingUtils.tempFolder()):
             if td and pasta_abs.startswith(
                     os.path.normcase(os.path.abspath(td))):
-                feedback.pushWarning(
-                    'A pasta de saída não pode ser um diretório temporário.')
-                raise QgsProcessingException(
+                feedback.pushWarning(self.tr(
+                    'A pasta de saída não pode ser um diretório temporário.'))
+                raise QgsProcessingException(self.tr(
                     'A pasta de saída não pode ser um diretório temporário. '
                     'Escolha uma pasta permanente no seu computador — o '
-                    'satélite (.tif) precisa ficar junto dos projetos.')
+                    'satélite (.tif) precisa ficar junto dos projetos.'))
         os.makedirs(pasta, exist_ok=True)
 
         crs = folha.sourceCrs()
@@ -269,78 +273,85 @@ class ExportarOCAD(QgsProcessingAlgorithm):
 
         satelite = None
         if exportar_sat:
-            feedback.pushInfo('Montando imagem de satélite...')
+            feedback.pushInfo(self.tr('Montando imagem de satélite...'))
             tif = self._exportar_satelite(
                 extent, crs, offset_zoom, pasta, feedback)
             satelite = self._geotransform(tif)
-            feedback.pushInfo(
-                f'Satélite salvo em: {tif} (não é carregado no QGIS para não '
-                'travar com imagens grandes; abra-o manualmente se quiser vê-lo).')
+            feedback.pushInfo(self.tr(
+                'Satélite salvo em: {arquivo} (não é carregado no QGIS para '
+                'não travar com imagens grandes; abra-o manualmente se quiser '
+                'vê-lo).', arquivo=tif))
         feedback.setProgress(60)
 
         linhas, elevacoes = [], []
         if curvas is not None:
-            feedback.pushInfo('Lendo curvas de nível...')
+            feedback.pushInfo(self.tr('Lendo curvas de nível...'))
             linhas, elevacoes = self._curvas_para_linhas(curvas, crs)
-            feedback.pushInfo(f'{len(linhas)} curva(s) lida(s).')
+            feedback.pushInfo(
+                self.tr('{n} curva(s) lida(s).', n=len(linhas)))
 
         codigos = None
         if norma is not None and linhas:
             codigos = classificar_curvas(elevacoes)
             mestras = codigos.count('102')
             if mestras:
-                feedback.pushInfo(
-                    f'{mestras} curva(s) mestra(s) (símbolo 102, a cada 5ª '
-                    'equidistância pelo campo ELEV).')
+                feedback.pushInfo(self.tr(
+                    '{n} curva(s) mestra(s) (símbolo 102, a cada 5ª '
+                    'equidistância pelo campo ELEV).', n=mestras))
             else:
-                feedback.pushWarning(
+                feedback.pushWarning(self.tr(
                     'Nenhuma curva mestra identificada (campo ELEV ausente '
                     'ou elevações insuficientes): todas sairão como curva '
-                    'normal (101).')
+                    'normal (101).'))
         feedback.setProgress(70)
 
         declinacao = self._declinacao(
             decl_auto, decl_manual, epsg, rect, centro_latlon, feedback)
-        feedback.pushInfo(f'Declinação usada: {declinacao:.2f}°.')
+        feedback.pushInfo(self.tr('Declinação usada: {valor}°.',
+                                  valor=f'{declinacao:.2f}'))
         feedback.setProgress(80)
 
         proj = ProjetoOcad(escala, epsg, rect, declinacao, linhas, satelite,
                            codigos_linhas=codigos)
-        feedback.pushInfo(f'Convergência meridiana: {proj.convergencia:.2f}° | '
-                          f'grivação (norte magnético): {proj.grivacao:.2f}°.')
+        feedback.pushInfo(self.tr(
+            'Convergência meridiana: {conv}° | grivação (norte magnético): '
+            '{griv}°.', conv=f'{proj.convergencia:.2f}',
+            griv=f'{proj.grivacao:.2f}'))
         if norma is not None:
-            feedback.pushInfo('Simbologia: %s.'
-                              % OPCOES_SIMBOLOGIA[indice_simb])
+            feedback.pushInfo(self.tr(
+                'Simbologia: {nome}.',
+                nome=self.tr(OPCOES_SIMBOLOGIA[indice_simb])))
         if incluir_norte:
             self._linhas_norte(proj, folha, norma, escala, feedback)
 
         resultado = {}
         if fazer_ocad:
             ocd = os.path.join(pasta, 'projeto_orifsc.ocd')
-            feedback.pushInfo('Gerando projeto OCAD 10 (.ocd)...')
+            feedback.pushInfo(self.tr('Gerando projeto OCAD 10 (.ocd)...'))
             doador = (arquivo_simbologia(norma, escala, '.ocd')
                       if norma is not None else None)
             if doador is not None and not os.path.exists(doador):
-                feedback.pushWarning(
+                feedback.pushWarning(self.tr(
                     'Simbologia para .ocd ainda não disponível (falta o '
-                    f'arquivo {os.path.basename(doador)} no plugin); o .ocd '
-                    'sai só com o símbolo de curva (sem linhas de norte). O '
-                    '.omap sai completo.')
+                    'arquivo {arquivo} no plugin); o .ocd sai só com o '
+                    'símbolo de curva (sem linhas de norte). O .omap sai '
+                    'completo.',
+                    arquivo=os.path.basename(doador)))
                 doador = None
             try:
                 escrever_ocd_v10(proj, ocd, doador=doador)
             except ValueError as exc:
                 if doador is None:
                     raise
-                feedback.pushWarning(
-                    f'Simbologia .ocd descartada ({exc}); gerando só com o '
-                    'símbolo de curva (sem linhas de norte).')
+                feedback.pushWarning(self.tr(
+                    'Simbologia .ocd descartada ({erro}); gerando só com o '
+                    'símbolo de curva (sem linhas de norte).', erro=exc))
                 escrever_ocd_v10(proj, ocd)
             resultado['OCD'] = ocd
         if fazer_omap:
             omap = os.path.join(pasta, 'projeto_orifsc.omap')
-            feedback.pushInfo(
-                'Gerando projeto OpenOrienteering Mapper (.omap)...')
+            feedback.pushInfo(self.tr(
+                'Gerando projeto OpenOrienteering Mapper (.omap)...'))
             if norma is None:
                 escrever_omap(proj, omap)
             else:
@@ -349,7 +360,7 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             resultado['OMAP'] = omap
         feedback.setProgress(100)
 
-        feedback.pushInfo(f'Projetos gerados em: {pasta}')
+        feedback.pushInfo(self.tr('Projetos gerados em: {pasta}', pasta=pasta))
         return resultado
 
     def _epsg_utm(self, crs: QgsCoordinateReferenceSystem) -> int:
@@ -366,12 +377,14 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         """
         authid = crs.authid()
         if not authid.startswith('EPSG:'):
-            raise QgsProcessingException(
-                'A folha precisa estar em um CRS UTM/WGS84 (rode "Definir Local").')
+            raise QgsProcessingException(self.tr(
+                'A folha precisa estar em um CRS UTM/WGS84 (rode "Definir '
+                'Local").'))
         epsg = int(authid.split(':')[1])
         if not (32601 <= epsg <= 32660 or 32701 <= epsg <= 32760):
-            raise QgsProcessingException(
-                f'CRS {authid} não é WGS84/UTM. Rode "Definir Local e Criar Folha".')
+            raise QgsProcessingException(self.tr(
+                'CRS {crs} não é WGS84/UTM. Rode "Definir Local e Criar '
+                'Folha".', crs=authid))
         return epsg
 
     def _linhas_norte(self, proj: Any, folha: Any, norma: Optional[str],
@@ -384,25 +397,26 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         não há o símbolo 601 no projeto, então nada é gerado.
         """
         if norma is None:
-            feedback.pushInfo(
+            feedback.pushInfo(self.tr(
                 'Linhas de norte não incluídas: elas usam o símbolo 601 da '
-                'norma — escolha a simbologia ISOM ou ISSprOM.')
+                'norma — escolha a simbologia ISOM ou ISSprOM.'))
             return
         from .ocad.geo import espacamento_norte_mm
         from .ocad.simbologia import CODIGO_LINHA_NORTE
         feicao = next(folha.getFeatures(), None)
         if feicao is None or feicao.geometry().isEmpty():
-            feedback.pushWarning('Folha sem geometria: linhas de norte não '
-                                 'incluídas.')
+            feedback.pushWarning(self.tr(
+                'Folha sem geometria: linhas de norte não incluídas.'))
             return
         contorno = [(v.x(), v.y()) for v in feicao.geometry().vertices()]
         espacamento = espacamento_norte_mm(norma, escala)
         codigo = CODIGO_LINHA_NORTE[norma]
         n = proj.definir_linhas_norte(contorno, espacamento, codigo)
-        feedback.pushInfo(
-            f'{n} linha(s) de norte magnético (símbolo {codigo}) a cada '
-            f'{espacamento:g} mm no papel ({espacamento * escala / 1000:g} m '
-            'no terreno).')
+        feedback.pushInfo(self.tr(
+            '{n} linha(s) de norte magnético (símbolo {codigo}) a cada '
+            '{papel} mm no papel ({terreno} m no terreno).',
+            n=n, codigo=codigo, papel=f'{espacamento:g}',
+            terreno=f'{espacamento * escala / 1000:g}'))
 
     def _declinacao(self, decl_auto: bool, decl_manual: float, epsg: int,
                     rect: Tuple[float, float, float, float],
@@ -417,36 +431,42 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         from ..acoes.comum import ler_declinacao, ler_folha_girada
         salva = ler_declinacao()
         if ler_folha_girada() is None:
-            feedback.pushWarning(
+            feedback.pushWarning(self.tr(
                 'Esta folha foi criada numa versão anterior do OrIFSC, '
                 'alinhada à quadrícula UTM: no OCAD/OOM ela aparece '
-                'inclinada. Rode "Definir Local e Criar Folha" de novo para '
-                'criar a folha girada para o norte magnético.')
+                'inclinada. Rode "Definir Local e Criar Folha" de novo (ou '
+                '"Ajustar Folha") para criar a folha girada para o norte '
+                'magnético.'))
 
         if not decl_auto:
             if salva is not None and abs(decl_manual - salva[0]) > 0.01:
-                feedback.pushWarning(
-                    f'A folha foi girada para a declinação {salva[0]:.2f}°; '
-                    f'exportando com {decl_manual:.2f}° ela vai aparecer '
-                    f'inclinada {abs(decl_manual - salva[0]):.2f}° no OCAD. '
-                    'Para mudar a declinação, refaça "Definir Local".')
+                feedback.pushWarning(self.tr(
+                    'A folha foi girada para a declinação {folha}°; '
+                    'exportando com {manual}° ela vai aparecer inclinada '
+                    '{diferenca}° no OCAD. Para mudar a declinação, refaça '
+                    '"Definir Local".',
+                    folha=f'{salva[0]:.2f}', manual=f'{decl_manual:.2f}',
+                    diferenca=f'{abs(decl_manual - salva[0]):.2f}'))
             return decl_manual
 
         if salva is not None:
-            feedback.pushInfo(
-                f'Declinação da folha: {salva[0]:.2f}° ({salva[1]}).')
+            from ..acoes.comum import rotulo_origem
+            feedback.pushInfo(self.tr(
+                'Declinação da folha: {valor}° ({origem}).',
+                valor=f'{salva[0]:.2f}', origem=rotulo_origem(salva[1])))
             return salva[0]
 
         from .ocad.geo import declinacao_wmm
         lat, lon = centro_latlon(epsg, (rect[0] + rect[2]) / 2,
                                  (rect[1] + rect[3]) / 2)
         valor, valido = declinacao_wmm(lat, lon, datetime.date.today())
-        feedback.pushInfo('Declinação calculada agora pelo modelo WMM '
-                          f'(sem internet): {valor:.2f}°.')
+        feedback.pushInfo(self.tr(
+            'Declinação calculada agora pelo modelo WMM (sem internet): '
+            '{valor}°.', valor=f'{valor:.2f}'))
         if not valido:
-            feedback.pushWarning(
+            feedback.pushWarning(self.tr(
                 'O modelo magnético embutido está fora da validade; confira '
-                'a declinação e atualize o plugin.')
+                'a declinação e atualize o plugin.'))
         return valor
 
     def _ler_escala(self) -> int:
@@ -461,8 +481,9 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         from ..acoes.comum import ler_escala
         escala = ler_escala()
         if not escala:
-            raise QgsProcessingException(
-                'Escala não definida. Rode antes "Definir Local e Criar Folha".')
+            raise QgsProcessingException(self.tr(
+                'Escala não definida. Rode antes "Definir Local e Criar '
+                'Folha".'))
         return escala
 
     def _simbologia_padrao(self) -> int:
@@ -564,10 +585,12 @@ class ExportarOCAD(QgsProcessingAlgorithm):
             if rect.width() / res <= MAX_PX and rect.height() / res <= MAX_PX:
                 zoom = max(1, z - offset_zoom)
                 if zoom != z:
-                    feedback.pushInfo(
-                        f'Zoom {z} reduzido para {zoom} (qualidade escolhida).')
-                feedback.pushInfo(f'Melhor zoom do Google para a folha: {zoom} '
-                                  f'(~{self._contar_tiles(rect, zoom)} tiles).')
+                    feedback.pushInfo(self.tr(
+                        'Zoom {z} reduzido para {zoom} (qualidade escolhida).',
+                        z=z, zoom=zoom))
+                feedback.pushInfo(self.tr(
+                    'Melhor zoom do Google para a folha: {zoom} (~{n} tiles).',
+                    zoom=zoom, n=self._contar_tiles(rect, zoom)))
                 return zoom
         return 1
 
@@ -604,8 +627,9 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                 pass
             faltantes.append((tx, ty))
         if dados:
-            feedback.pushInfo(f'{len(dados)} tile(s) do cache; '
-                              f'baixando {len(faltantes)}.')
+            feedback.pushInfo(self.tr(
+                '{n} tile(s) do cache; baixando {faltam}.',
+                n=len(dados), faltam=len(faltantes)))
         if not faltantes:
             return dados
 
@@ -618,7 +642,8 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         def _prog(feito: int, tot: int) -> None:
             feedback.setProgress(int(45 * feito / tot))
             if feito == tot or feito % passo_log == 0:
-                feedback.pushInfo(f'  tiles: {feito}/{tot}')
+                feedback.pushInfo(self.tr('  tiles: {feito}/{total}',
+                                          feito=feito, total=tot))
 
         baixados = baixar_varios(
             url_de.values(), user_agent=UA, max_conc=12, timeout_ms=20000,
@@ -686,10 +711,10 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         tiles = [(tx, ty) for ty in range(ty0, ty1 + 1)
                  for tx in range(tx0, tx1 + 1)]
         total_tiles = len(tiles)
-        feedback.pushInfo(
-            f'Baixando {total_tiles} tiles no melhor zoom ({zoom}). Em folhas '
-            'grandes pode levar alguns minutos — acompanhe abaixo: enquanto o '
-            'número avança, está baixando (não travou).')
+        feedback.pushInfo(self.tr(
+            'Baixando {n} tiles no melhor zoom ({zoom}). Em folhas grandes '
+            'pode levar alguns minutos — acompanhe abaixo: enquanto o número '
+            'avança, está baixando (não travou).', n=total_tiles, zoom=zoom))
 
         dados_por_tile = self._obter_tiles(tiles, zoom, feedback)
 
@@ -699,14 +724,15 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         ds = drv.Create(destino, larg, alt, 3, gdal.GDT_Byte,
                         ['COMPRESS=LZW', 'BIGTIFF=IF_SAFER'])
         if ds is None:
-            raise QgsProcessingException(
-                'Não foi possível criar o mosaico intermediário do satélite.')
+            raise QgsProcessingException(self.tr(
+                'Não foi possível criar o mosaico intermediário do satélite.'))
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(3857)
         ds.SetProjection(srs.ExportToWkt())
         ds.SetGeoTransform((ulx, res, 0.0, uly, 0.0, -res))
 
-        feedback.pushInfo('Montando o mosaico (por faixas, direto no disco)...')
+        feedback.pushInfo(
+            self.tr('Montando o mosaico (por faixas, direto no disco)...'))
         falhas = 0
         n_faixas = ty1 - ty0 + 1
         for j, ty in enumerate(range(ty0, ty1 + 1)):
@@ -738,21 +764,24 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                            buf_line_space=larg * 3, buf_band_space=1)
             feedback.setProgress(45 + int(7 * (j + 1) / n_faixas))
             if (j + 1) % max(1, n_faixas // 10) == 0 or j + 1 == n_faixas:
-                feedback.pushInfo(f'  montando: faixa {j + 1}/{n_faixas}')
+                feedback.pushInfo(self.tr(
+                    '  montando: faixa {i}/{total}', i=j + 1, total=n_faixas))
         ds.FlushCache()
         ds = None
 
         if feedback.isCanceled():
-            raise QgsProcessingException('Operação cancelada pelo usuário.')
-        if falhas == total_tiles:
             raise QgsProcessingException(
-                'Não foi possível baixar nenhuma tile do Google. '
-                'Verifique a conexão com a internet.')
+                self.tr('Operação cancelada pelo usuário.'))
+        if falhas == total_tiles:
+            raise QgsProcessingException(self.tr(
+                'Não foi possível baixar nenhuma tile do Google. Verifique a '
+                'conexão com a internet.'))
         if falhas:
-            feedback.pushWarning(
-                f'{falhas} tile(s) não baixaram (áreas pretas).')
-        feedback.pushInfo(f'Mosaico: {larg}×{alt}px '
-                          f'({res:.3f} m/px em 3857).')
+            feedback.pushWarning(self.tr(
+                '{n} tile(s) não baixaram (áreas pretas).', n=falhas))
+        feedback.pushInfo(self.tr(
+            'Mosaico: {larg}×{alt}px ({res} m/px em 3857).',
+            larg=larg, alt=alt, res=f'{res:.3f}'))
 
     def _reprojetar_satelite(
             self,
@@ -768,8 +797,9 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         warp; não mudam um byte do resultado.
         """
         from osgeo import gdal
-        feedback.pushInfo('Reprojetando para o sistema da folha — etapa mais '
-                          'demorada; acompanhe a % abaixo...')
+        feedback.pushInfo(self.tr(
+            'Reprojetando para o sistema da folha — etapa mais demorada; '
+            'acompanhe a % abaixo...'))
         ds_out = gdal.Warp(destino_tif, tmp_3857, dstSRS=crs.authid(),
                            resampleAlg='lanczos',
                            multithread=True,
@@ -778,14 +808,14 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                                         'NUM_THREADS=ALL_CPUS'],
                            creationOptions=['COMPRESS=LZW', 'TILED=NO',
                                             'BIGTIFF=NO', 'PHOTOMETRIC=RGB'],
-                           callback=self._cb_gdal(feedback, 'reprojetando',
-                                                  52, 60))
+                           callback=self._cb_gdal(
+                               feedback, self.tr('reprojetando'), 52, 60))
         if ds_out is None:
             if feedback.isCanceled():
                 raise QgsProcessingException(
-                    'Operação cancelada pelo usuário.')
-            raise QgsProcessingException(
-                'Falha ao reprojetar a imagem do satélite (GDAL Warp).')
+                    self.tr('Operação cancelada pelo usuário.'))
+            raise QgsProcessingException(self.tr(
+                'Falha ao reprojetar a imagem do satélite (GDAL Warp).'))
         ds_out.FlushCache()
         ds_out = None
 
