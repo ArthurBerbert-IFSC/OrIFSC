@@ -15,7 +15,8 @@ from qgis.core import (
     QgsProcessingParameterFolderDestination,
     QgsProcessingException, QgsProject,
     QgsProcessingUtils,
-    QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+    QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsPointXY,
+    QgsRectangle,
 )
 from qgis.PyQt.QtGui import QImage, QIcon
 
@@ -275,7 +276,8 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         if exportar_sat:
             feedback.pushInfo(self.tr('Montando imagem de satélite...'))
             tif = self._exportar_satelite(
-                extent, crs, offset_zoom, pasta, feedback)
+                self._folha_no_papel(extent, escala), epsg, crs,
+                offset_zoom, pasta, feedback)
             satelite = self._geotransform(tif)
             feedback.pushInfo(self.tr(
                 'Satélite salvo em: {arquivo} (não é carregado no QGIS para '
@@ -530,23 +532,53 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         from osgeo import gdal
         ds = gdal.Open(tif)
         gt = ds.GetGeoTransform()
-        sat = {'path': tif, 'ulx': gt[0], 'uly': gt[3],
+        sat = {'path': tif, 'gt': tuple(gt), 'ulx': gt[0], 'uly': gt[3],
                'px': gt[1], 'py': gt[5],
                'w': ds.RasterXSize, 'h': ds.RasterYSize}
         ds = None
         return sat
 
+    def _folha_no_papel(self, extent: Any,
+                        escala: int) -> Tuple[float, float, float, float,
+                                              float]:
+        """(ref_e, ref_n, largura_mm, altura_mm, grivação) da folha exportada.
+
+        A folha girada do projeto quando a camada escolhida é ela (mesmo
+        centro); senão (projeto 0.1.x ou outro polígono), o retângulo
+        envolvente da camada, sem rotação — a imagem sai norte-acima, como
+        nas versões anteriores.
+        """
+        from ..acoes.comum import ler_folha_girada
+        cx = (extent.xMinimum() + extent.xMaximum()) / 2.0
+        cy = (extent.yMinimum() + extent.yMaximum()) / 2.0
+        g = ler_folha_girada()
+        if (g is not None and abs(g['ref_e'] - cx) < 0.5
+                and abs(g['ref_n'] - cy) < 0.5):
+            return (g['ref_e'], g['ref_n'], g['larg_mm'], g['alt_mm'],
+                    g['grivacao'])
+        return (cx, cy, extent.width() * 1000.0 / escala,
+                extent.height() * 1000.0 / escala, 0.0)
+
     def _exportar_satelite(
             self,
-            extent: Any,
+            folha_papel: Tuple[float, float, float, float, float],
+            epsg: int,
             crs: QgsCoordinateReferenceSystem,
             offset_zoom: int,
             pasta: str,
             feedback: Any) -> str:
-        """Exporta satélite georreferenciado para o CRS da folha.
+        """Exporta o satélite já alinhado ao papel (norte magnético para cima).
+
+        O raster final cobre só a folha (+2 mm de margem) e é girado pela
+        grivação dentro da MESMA reprojeção Web Mercator → UTM que já existia
+        — uma única reamostragem (Lanczos), sem perda de nitidez a mais. Com
+        isso o TIFF fica do tamanho da folha (sem o retângulo envolvente da
+        folha girada, ~1,65x a área) e sobra mais pixel para o zoom dentro do
+        limite do OCAD 10.
 
         Args:
-            extent: Extensão da folha.
+            folha_papel: (ref_e, ref_n, largura_mm, altura_mm, grivação).
+            epsg: EPSG UTM da folha.
             crs: CRS da folha.
             offset_zoom: Redução manual de qualidade.
             pasta: Pasta de saída.
@@ -555,18 +587,47 @@ class ExportarOCAD(QgsProcessingAlgorithm):
         Returns:
             str: Caminho do GeoTIFF final.
         """
-        crs3857 = QgsCoordinateReferenceSystem.fromEpsgId(3857)
-        rect = QgsCoordinateTransform(
-            crs, crs3857, QgsProject.instance()).transformBoundingBox(extent)
+        from .ocad.geo import grade_papel
+        from .ocad.projeto import centro_latlon
+        ref_e, ref_n, larg_mm, alt_mm, griv = folha_papel
+        escala = self._ler_escala()
+        lat, _ = centro_latlon(epsg, ref_e, ref_n)
+        cos_lat = math.cos(math.radians(lat))
+        larg_m = (larg_mm + 4.0) * escala / 1000.0
+        alt_m = (alt_mm + 4.0) * escala / 1000.0
 
-        zoom = self._escolher_zoom(rect, offset_zoom, feedback)
+        crs3857 = QgsCoordinateReferenceSystem.fromEpsgId(3857)
+        tr3857 = QgsCoordinateTransform(crs, crs3857, QgsProject.instance())
+        # Pegada do raster no Web Mercator (com folga de 10 m) para montar o
+        # mosaico de tiles que alimenta a reprojeção.
+        gt0, w0, h0 = grade_papel(ref_e, ref_n, larg_mm, alt_mm, escala,
+                                  griv, 1.0)
+        cantos = [QgsPointXY(gt0[0] + gt0[1] * c + gt0[2] * r,
+                             gt0[3] + gt0[4] * c + gt0[5] * r)
+                  for c, r in ((0, 0), (w0, 0), (w0, h0), (0, h0))]
+        pegada = QgsRectangle.fromCenterAndSize(QgsPointXY(ref_e, ref_n),
+                                                1.0, 1.0)
+        for p in cantos:
+            pegada.combineExtentWith(p)
+        pegada.grow(10.0)
+        rect = tr3857.transformBoundingBox(pegada)
+
+        zoom = self._escolher_zoom(rect, offset_zoom, feedback,
+                                   (larg_m, alt_m, cos_lat))
+        pixel_m = _resolucao(zoom) * cos_lat
+        maior = max(larg_m, alt_m) / pixel_m
+        if maior > MAX_PX:
+            pixel_m *= maior / MAX_PX
+        gt, w, h = grade_papel(ref_e, ref_n, larg_mm, alt_mm, escala, griv,
+                               pixel_m)
 
         caminho = os.path.join(pasta, 'satelite_orifsc.tif')
         tmp_3857 = QgsProcessingUtils.generateTempFilename(
             'orifsc_sat_3857.tif')
         try:
             self._montar_mosaico_tif(rect, zoom, tmp_3857, feedback)
-            self._reprojetar_satelite(tmp_3857, crs, caminho, feedback)
+            self._reprojetar_satelite(tmp_3857, epsg, gt, w, h, caminho,
+                                      feedback)
         finally:
             try:
                 os.remove(tmp_3857)
@@ -574,15 +635,30 @@ class ExportarOCAD(QgsProcessingAlgorithm):
                 pass
         return caminho
 
-    def _escolher_zoom(self, rect: Any, offset_zoom: int, feedback: Any) -> int:
-        """Maior zoom (<= ZOOM_MAX) cujo mosaico cabe em MAX_PX por lado — ou
-        seja, a MELHOR resolução possível para a folha (o satélite é a base de
-        desenho, então sempre buscamos o zoom máximo). MAX_PX é limite técnico
-        (memória e abertura no OCAD 10 32-bit), não ajuste de qualidade — só atua
-        em folhas gigantes."""
+    def _escolher_zoom(self, rect: Any, offset_zoom: int, feedback: Any,
+                       saida: Optional[Tuple[float, float, float]] = None
+                       ) -> int:
+        """Maior zoom (<= ZOOM_MAX) cuja imagem FINAL cabe em MAX_PX por lado
+        — ou seja, a MELHOR resolução possível para a folha (o satélite é a
+        base de desenho, então sempre buscamos o zoom máximo). MAX_PX é
+        limite técnico (abertura no OCAD 10 32-bit), não ajuste de qualidade
+        — só atua em folhas gigantes.
+
+        ``saida`` = (largura_m, altura_m, cos_lat) da imagem final alinhada
+        ao papel; o mosaico intermediário (só lido pelo GDAL) pode ser até
+        2x maior por lado. Sem ``saida``, mede o próprio mosaico.
+        """
         for z in range(ZOOM_MAX, 0, -1):
             res = _resolucao(z)
-            if rect.width() / res <= MAX_PX and rect.height() / res <= MAX_PX:
+            if saida is not None:
+                larg_m, alt_m, cos_lat = saida
+                cabe = (max(larg_m, alt_m) / (res * cos_lat) <= MAX_PX
+                        and max(rect.width(), rect.height()) / res
+                        <= 2 * MAX_PX)
+            else:
+                cabe = (rect.width() / res <= MAX_PX
+                        and rect.height() / res <= MAX_PX)
+            if cabe:
                 zoom = max(1, z - offset_zoom)
                 if zoom != z:
                     feedback.pushInfo(self.tr(
@@ -786,38 +862,66 @@ class ExportarOCAD(QgsProcessingAlgorithm):
     def _reprojetar_satelite(
             self,
             tmp_3857: str,
-            crs: QgsCoordinateReferenceSystem,
+            epsg: int,
+            gt: Tuple[float, ...],
+            w: int,
+            h: int,
             destino_tif: str,
             feedback: Any) -> None:
-        """Reprojeta o mosaico 3857 para o CRS da folha.
+        """Reprojeta o mosaico 3857 direto na grade alinhada ao papel.
 
-        O GeoTIFF FINAL sai em RGB com LZW e sem tiling (`TILED=NO`, strips)
-        para manter compatibilidade com o OCAD 10 — não alterar (regra 7 das
-        Diretrizes). `multithread`/`NUM_THREADS` aceleram só o cálculo do
-        warp; não mudam um byte do resultado.
+        Uma única reamostragem (Lanczos) para um raster intermediário com o
+        geotransform girado; depois ``gdal.Translate`` só copia os pixels
+        para o GeoTIFF FINAL em RGB, LZW e sem tiling (`TILED=NO`, strips),
+        compatível com o OCAD 10 — não alterar (regra 7 das Diretrizes). O
+        ``TFW=YES`` grava o world file com a rotação, para o OOM posicionar o
+        template. `multithread`/`NUM_THREADS` aceleram só o cálculo do warp.
         """
-        from osgeo import gdal
+        from osgeo import gdal, osr
         feedback.pushInfo(self.tr(
             'Reprojetando para o sistema da folha — etapa mais demorada; '
             'acompanhe a % abaixo...'))
-        ds_out = gdal.Warp(destino_tif, tmp_3857, dstSRS=crs.authid(),
-                           resampleAlg='lanczos',
-                           multithread=True,
-                           warpMemoryLimit=256,
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(int(epsg))
+        tmp_papel = QgsProcessingUtils.generateTempFilename(
+            'orifsc_sat_papel.tif')
+        try:
+            ds = gdal.GetDriverByName('GTiff').Create(
+                tmp_papel, int(w), int(h), 3, gdal.GDT_Byte,
+                ['TILED=YES', 'BIGTIFF=IF_SAFER'])
+            if ds is None:
+                raise QgsProcessingException(self.tr(
+                    'Falha ao reprojetar a imagem do satélite (GDAL Warp).'))
+            ds.SetGeoTransform(tuple(gt))
+            ds.SetProjection(srs.ExportToWkt())
+            ok = gdal.Warp(ds, tmp_3857, resampleAlg='lanczos',
+                           multithread=True, warpMemoryLimit=256,
                            warpOptions=['INIT_DEST=255',
                                         'NUM_THREADS=ALL_CPUS'],
-                           creationOptions=['COMPRESS=LZW', 'TILED=NO',
-                                            'BIGTIFF=NO', 'PHOTOMETRIC=RGB'],
                            callback=self._cb_gdal(
-                               feedback, self.tr('reprojetando'), 52, 60))
-        if ds_out is None:
-            if feedback.isCanceled():
-                raise QgsProcessingException(
-                    self.tr('Operação cancelada pelo usuário.'))
-            raise QgsProcessingException(self.tr(
-                'Falha ao reprojetar a imagem do satélite (GDAL Warp).'))
-        ds_out.FlushCache()
-        ds_out = None
+                               feedback, self.tr('reprojetando'), 52, 58))
+            ds.FlushCache()
+            ds = None
+            if not ok:
+                if feedback.isCanceled():
+                    raise QgsProcessingException(
+                        self.tr('Operação cancelada pelo usuário.'))
+                raise QgsProcessingException(self.tr(
+                    'Falha ao reprojetar a imagem do satélite (GDAL Warp).'))
+            ds_out = gdal.Translate(
+                destino_tif, tmp_papel,
+                creationOptions=['COMPRESS=LZW', 'TILED=NO', 'BIGTIFF=NO',
+                                 'PHOTOMETRIC=RGB', 'TFW=YES'])
+            if ds_out is None:
+                raise QgsProcessingException(self.tr(
+                    'Falha ao reprojetar a imagem do satélite (GDAL Warp).'))
+            ds_out.FlushCache()
+            ds_out = None
+        finally:
+            try:
+                os.remove(tmp_papel)
+            except OSError:
+                pass
 
     @staticmethod
     def _cb_gdal(

@@ -81,6 +81,36 @@ def cantos_folha(ref_e: float, ref_n: float, larg_mm: float, alt_mm: float,
                          (meia_l, meia_a), (-meia_l, meia_a))]
 
 
+def grade_papel(ref_e: float, ref_n: float, larg_mm: float, alt_mm: float,
+                escala: int, grivacao_graus: float, pixel_m: float,
+                margem_mm: float = 2.0) -> Tuple[Tuple[float, ...], int, int]:
+    """Grade de um raster alinhado ao papel (norte magnético para cima)
+    cobrindo a folha mais ``margem_mm`` de cada lado.
+
+    Returns:
+        (geotransform GDAL de 6 termos, largura em px, altura em px). O
+        geotransform tem termos de rotação: colunas andam para a "direita do
+        papel" e linhas para "baixo do papel", no mesmo sentido de
+        ``papel_para_mundo``. Com grivação zero é a grade norte-acima comum.
+    """
+    if pixel_m <= 0:
+        raise ValueError('Tamanho do pixel deve ser > 0.')
+    larg_tot_mm = larg_mm + 2 * margem_mm
+    alt_tot_mm = alt_mm + 2 * margem_mm
+    w = int(math.ceil(larg_tot_mm * escala / 1000.0 / pixel_m))
+    h = int(math.ceil(alt_tot_mm * escala / 1000.0 / pixel_m))
+    # Canto superior-esquerdo do raster, centrado na folha (a sobra de
+    # arredondamento fica distribuída igualmente nos dois lados).
+    meia_l_mm = w * pixel_m * 1000.0 / escala / 2.0
+    meia_a_mm = h * pixel_m * 1000.0 / escala / 2.0
+    ulx, uly = papel_para_mundo(-meia_l_mm, -meia_a_mm, ref_e, ref_n, escala,
+                                grivacao_graus)
+    g = math.radians(grivacao_graus)
+    gt = (ulx, pixel_m * math.cos(g), -pixel_m * math.sin(g),
+          uly, -pixel_m * math.sin(g), -pixel_m * math.cos(g))
+    return gt, w, h
+
+
 def espacamento_norte_mm(norma: str, escala: int) -> float:
     """Espaçamento das linhas de norte magnético no papel (mm), pela norma.
 

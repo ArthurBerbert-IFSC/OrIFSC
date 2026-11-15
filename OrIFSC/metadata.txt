@@ -23,6 +23,7 @@ deprecated=False
 changelog=
     0.2.0
     - Folha certa no OCAD/OOM: a folha nasce girada para o norte magnetico (grivacao = declinacao - convergencia) e fica em pe no papel, sem a imagem "torcida" e sem cantos vazios. Satelite e curvas cobrem a folha inteira.
+    - Satelite exportado ja alinhado ao papel (norte magnetico para cima) e so do tamanho da folha: a rotacao e feita na mesma reprojecao que ja existia (uma unica reamostragem, sem perda de nitidez), o arquivo fica cerca de 40 por cento menor e no OCAD a imagem entra sem rotacao. Um world file (.tfw) acompanha a imagem para o OOM.
     - Declinacao magnetica calculada sem internet pelo World Magnetic Model 2025 embutido (valido ate 2029), mostrada ao vivo no Definir Local, com opcao de valor manual. A exportacao usa a mesma declinacao que girou a folha (e avisa se for usada outra). Sai a consulta a NOAA com chave de demonstracao.
     - Novo "Ajustar Folha (mover, escala, papel)": previa ao vivo no mapa, mover a folha com o mouse (clique fixa, botao direito/Esc cancela) e trocar escala, papel e orientacao sem refazer o projeto. A camada folha e atualizada no lugar - rodar o Definir Local de novo nao duplica mais a camada.
     - "Ajustar ao limite": calcula papel, orientacao e posicao que contem a camada de limite (ou um KML), com 5 mm de folga; aumenta o papel se preciso e so muda a escala se voce aceitar.

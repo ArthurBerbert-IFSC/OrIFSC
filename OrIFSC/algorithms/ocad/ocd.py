@@ -373,11 +373,14 @@ def escrever_ocd_v10(proj: Any, caminho: str,
     if proj.satelite:
         nome = os.path.basename(proj.satelite['path'])
         mcx, mcy = proj.satelite['centro_mm']
+        # Ângulo da imagem no papel: 0 para a imagem alinhada ao papel (0.2.0);
+        # a grivação para a norte-acima (versões anteriores / testes).
+        angulo = proj.satelite.get('angulo', proj.grivacao)
         w.add_string(8, '%s\ts1\tx%.6f\ty%.6f\ta%.8f\tu%.10f\tv%.10f'
                         '\td0\tp\tt0\to0\tb%.6f' % (
-                            nome, mcx, -mcy, proj.grivacao,
+                            nome, mcx, -mcy, angulo,
                             proj.satelite['u_mm'], proj.satelite['v_mm'],
-                            proj.grivacao))
+                            angulo))
 
     with open(caminho, 'wb') as f:
         f.write(w.ba)

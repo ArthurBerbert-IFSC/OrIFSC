@@ -20,13 +20,15 @@ concluídos e registre aqui qualquer mudança de decisão.
 | 10 | Quando o assistente aparece | **Abre sozinho na primeira vez**; depois o QGIS lembra se a pessoa fechou; botão na barra reabre. |
 | 11 | Como saem as linhas de norte | **Linhas separadas, pretas** (símbolo de linha de norte da norma), uma por objeto. |
 | 12 | Tradução (pt/en/tr, feita em outra sessão na 0.1.19) | Juntada nesta versão; todos os textos novos da 0.2.0 traduzidos para inglês e turco. |
+| 13 | Satélite cobria o retângulo envolvente da folha girada (1,65x a área) | **Opção B:** girar a imagem para o papel dentro da mesma reprojeção (uma só reamostragem Lanczos); o TIFF cobre só a folha + 2 mm. Transparência descartada (o OCAD 10 não lê canal alfa). |
 
 Decisões técnicas (tomadas pelo Claude, sem objeção):
 
 - **Declinação offline** com o modelo WMM2025 embutido (`OrIFSC/recursos/wmm/`),
   válido até o fim de 2029. Acaba a dependência da chave de demonstração da NOAA.
-- **Satélite continua com o norte da quadrícula para cima** no GeoTIFF; o OCAD
-  gira a imagem ao abrir (como já acontece). Girar antes perderia nitidez.
+- ~~Satélite com o norte da quadrícula para cima~~ — **mudado (decisão 13):** o
+  satélite sai alinhado ao papel, girado dentro da mesma reprojeção (sem perda de
+  nitidez), cobrindo só a folha.
 - **Folha muda → etapas dependentes ficam "desatualizadas"** no painel; nada é
   refeito automaticamente (downloads pesados).
 
@@ -110,3 +112,7 @@ Para cada um dos dois programas, com um projeto em Florianópolis (declinação 
 11. Rodar no QGIS 3.40 LTR e no QGIS 4 (os testes daqui usaram o QGIS 3.34 sem tela).
 12. Idiomas: em OrIFSC → Idioma / Language, trocar para Türkçe e English e repetir o fluxo
     pelo assistente; pedir a alguém da comunidade turca para revisar os textos novos.
+
+13. Satélite: no OCAD 10 a imagem entra em pé, do tamanho da folha, e coincide com as
+    curvas; **no OOM, conferir que o template abre girado no lugar certo** (usa o
+    `satelite_orifsc.tfw` com rotação — único ponto não testado aqui).

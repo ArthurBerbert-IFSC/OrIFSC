@@ -75,3 +75,32 @@ def test_sem_grivacao_e_o_retangulo_da_versao_antiga(geo):
         pytest.approx((1000 + 594, 2000 - 420)),
         pytest.approx((1000 - 594, 2000 - 420)),
     ]
+
+
+@pytest.mark.parametrize('grivacao', GRIVACOES)
+def test_grade_papel_cobre_a_folha_alinhada_ao_papel(geo, grivacao):
+    ref_e, ref_n, escala, px = 742000.0, 6945000.0, 10000, 0.6
+    gt, w, h = geo.grade_papel(ref_e, ref_n, 297, 210, escala, grivacao, px)
+    # Tamanho: folha + 2 mm de cada lado, no pixel pedido.
+    assert w == math.ceil(301 * 10 / px) and h == math.ceil(214 * 10 / px)
+
+    def mundo(col, lin):
+        return (gt[0] + gt[1] * col + gt[2] * lin,
+                gt[3] + gt[4] * col + gt[5] * lin)
+    # Centro do raster = centro da folha.
+    assert mundo(w / 2, h / 2) == pytest.approx((ref_e, ref_n), abs=1e-6)
+    # As linhas do raster correm para a direita do papel: no papel do OCAD
+    # o raster é um retângulo em pé (sem rotação).
+    for col, lin in [(0, 0), (w, 0), (w, h), (0, h)]:
+        x, y = geo.mundo_para_papel(*mundo(col, lin), ref_e, ref_n, escala,
+                                    grivacao)
+        assert abs(x) == pytest.approx(w * px * 1000 / escala / 2, abs=1e-6)
+        assert abs(y) == pytest.approx(h * px * 1000 / escala / 2, abs=1e-6)
+    # Pixel quadrado do tamanho pedido.
+    assert math.hypot(gt[1], gt[4]) == pytest.approx(px)
+    assert math.hypot(gt[2], gt[5]) == pytest.approx(px)
+
+
+def test_grade_papel_sem_grivacao_e_norte_acima(geo):
+    gt, w, h = geo.grade_papel(1000.0, 2000.0, 297, 210, 4000, 0.0, 0.5)
+    assert gt[2] == 0 and gt[4] == 0 and gt[1] == 0.5 and gt[5] == -0.5

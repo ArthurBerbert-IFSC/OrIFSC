@@ -8,6 +8,8 @@ dois formatos saem com geometria idêntica e sem erro de sinal de rotação.
 Coordenadas de papel ficam em **mm com y para baixo** (convenção do OOM); cada
 escritor depois aplica suas unidades (OOM: 1/1000 mm; OCD: 1/100 mm, y para cima).
 """
+import math
+
 from qgis.core import (
     QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsPointXY,
     QgsProject,
@@ -145,15 +147,25 @@ class ProjetoOcad:
         return p.x(), p.y()
 
     def _preparar_satelite(self, sat: Optional[dict]) -> Optional[dict]:
-        """Acrescenta ao dict do satélite o posicionamento de papel do OCD
-        (centro em mm e tamanho do pixel em mm)."""
+        """Acrescenta ao dict do satélite o posicionamento de papel do OCD:
+        centro em mm, tamanho do pixel em mm e ângulo da imagem no papel.
+
+        Aceita o geotransform completo (``gt``, com termos de rotação — imagem
+        já alinhada ao papel) ou só ``ulx/uly/px/py`` (imagem norte-acima).
+        O ângulo é a grivação mais a rotação da própria imagem no mundo: 0
+        para a imagem alinhada ao papel, a grivação para a norte-acima.
+        """
         if not sat:
             return None
-        cx = sat['ulx'] + (sat['w'] / 2.0) * sat['px']
-        cy = sat['uly'] + (sat['h'] / 2.0) * sat['py']
+        gt = sat.get('gt') or (sat['ulx'], sat['px'], 0.0,
+                               sat['uly'], 0.0, sat['py'])
+        w, h = sat['w'], sat['h']
+        cx = gt[0] + gt[1] * w / 2.0 + gt[2] * h / 2.0
+        cy = gt[3] + gt[4] * w / 2.0 + gt[5] * h / 2.0
         mcx, mcy = self.mapa_mm(cx, cy)
         sat = dict(sat)
         sat['centro_mm'] = (mcx, mcy)
-        sat['u_mm'] = sat['px'] * 1000.0 / self.escala
-        sat['v_mm'] = abs(sat['py']) * 1000.0 / self.escala
+        sat['u_mm'] = math.hypot(gt[1], gt[4]) * 1000.0 / self.escala
+        sat['v_mm'] = math.hypot(gt[2], gt[5]) * 1000.0 / self.escala
+        sat['angulo'] = self.grivacao + math.degrees(math.atan2(gt[4], gt[1]))
         return sat
