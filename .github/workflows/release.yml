@@ -24,8 +24,12 @@ jobs:
         with:
           python-version: "3.x"
 
+      # >= 2.11.0: o upload por token envia auto_approve_after_scan=true, pedindo
+      # publicacao automatica apos o scan de seguranca. O site so atende se a
+      # conta tiver a permissao can_approve; sem ela a versao fica na fila de
+      # aprovacao manual (voluntarios do plugins.qgis.org, dias uteis).
       - name: Instalar qgis-plugin-ci
-        run: pip install qgis-plugin-ci
+        run: pip install "qgis-plugin-ci>=2.11.0"
 
       # qgis-plugin-ci, quando recebe --github-token, exige que o GitHub Release
       # da tag ja exista (senao falha com GithubReleaseNotFound). O push de tag
